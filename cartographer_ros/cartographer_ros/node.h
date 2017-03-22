@@ -66,6 +66,7 @@ class Node {
 
   void PublishSubmapList(const ::ros::WallTimerEvent& timer_event);
   void PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event);
+  void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
 
   const NodeOptions options_;
@@ -83,6 +84,11 @@ class Node {
   ::ros::Publisher scan_matched_point_cloud_publisher_;
   cartographer::common::Time last_scan_matched_point_cloud_time_ =
       cartographer::common::Time::min();
+
+
+  ::ros::Publisher mesh_publisher_;
+  ::ros::Publisher normal_publisher_;
+  ::ros::Publisher tsdf_publisher_;
 
   ::ros::Publisher occupancy_grid_publisher_;
   std::thread occupancy_grid_thread_;

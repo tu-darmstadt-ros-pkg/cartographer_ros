@@ -65,6 +65,10 @@ void Node::Initialize() {
   submap_list_publisher_ =
       node_handle_.advertise<::cartographer_ros_msgs::SubmapList>(
           kSubmapListTopic, kLatestOnlyPublisherQueueSize);
+
+  //mesh_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_mesh", 1);
+  //normal_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_normals", 1);
+  tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
   submap_query_server_ = node_handle_.advertiseService(
       kSubmapQueryServiceName, &Node::HandleSubmapQuery, this);
 
@@ -83,7 +87,10 @@ void Node::Initialize() {
 
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.submap_publish_period_sec),
-      &Node::PublishSubmapList, this));
+      &Node::PublishSubmapList, this));  
+  wall_timers_.push_back(node_handle_.createWallTimer(
+      ::ros::WallDuration(options_.submap_publish_period_sec),
+      &Node::PublishTSDF, this));
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.pose_publish_period_sec),
       &Node::PublishTrajectoryStates, this));
@@ -103,6 +110,77 @@ bool Node::HandleSubmapQuery(
 void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
   carto::common::MutexLocker lock(&mutex_);
   submap_list_publisher_.publish(map_builder_bridge_.GetSubmapList());
+}
+
+void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
+    std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();
+
+    if(tsdf_list.size() > 0){
+        chisel::ChiselPtr chisel_map = tsdf_list[0];
+        std::cout<<"b"<<std::endl;
+        std::cout<<chisel_map<<std::endl;
+        if(chisel_map)
+        {
+            const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
+            std::cout<<"c"<<std::endl;
+            const float resolution = chunkManager.GetResolution(); //crashes here
+            std::cout<<"d"<<std::endl;
+            pcl::PointCloud<pcl::PointXYZRGB> cloud;
+            cloud.clear();
+            int stepSize=1;
+
+            for (const std::pair<chisel::ChunkID, chisel::ChunkPtr>& pair : chunkManager.GetChunks())
+            {
+              const std::vector<chisel::DistVoxel>&  voxels = pair.second->GetVoxels();
+              chisel::Vec3 origin = pair.second->GetOrigin();
+
+              int voxelID = 0;
+
+              for (int z = 0; z < chunkManager.GetChunkSize()(2); z+=stepSize)
+              {
+                for (int y = 0; y < chunkManager.GetChunkSize()(1); y+=stepSize)
+                {
+                  for (int x = 0; x < chunkManager.GetChunkSize()(0); x+=stepSize)
+                  {
+                    if(voxels[voxelID].GetWeight() > 0)
+                    {
+
+                        float sdf = voxels[voxelID].GetSDF();
+
+                        if(sdf>0)
+                        {
+                          pcl::PointXYZRGB point = pcl::PointXYZRGB(0, 0, 255);
+                          point.x = origin.x() + x *resolution;
+                          point.y = origin.y() + y *resolution;
+                          point.z = origin.z() + z *resolution;
+                          cloud.points.insert(cloud.end(), point);
+                        }
+                        else
+                        {
+                          pcl::PointXYZRGB point = pcl::PointXYZRGB(255, 0, 0);
+                          point.x = origin.x() + x *resolution;
+                          point.y = origin.y() + y *resolution;
+                          point.z = origin.z() + z *resolution;
+                          cloud.points.insert(cloud.end(), point);
+                        }
+                    }
+
+                    voxelID+=stepSize;
+                  }
+                }
+              }
+            }
+            sensor_msgs::PointCloud2 pc;
+
+            pcl::toROSMsg(cloud, pc);
+            pc.header.frame_id = "map";
+            pc.header.stamp = ros::Time::now();
+            tsdf_publisher_.publish(pc);
+        }
+        else
+            std::cout<<"null"<<std::endl;
+    }
+
 }
 
 void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
