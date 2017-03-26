@@ -37,6 +37,7 @@
 #include "nav_msgs/Odometry.h"
 #include "ros/serialization.h"
 #include "sensor_msgs/PointCloud2.h"
+#include "visualization_msgs/Marker.h"
 #include "tf2_eigen/tf2_eigen.h"
 
 namespace cartographer_ros {
@@ -66,7 +67,7 @@ void Node::Initialize() {
       node_handle_.advertise<::cartographer_ros_msgs::SubmapList>(
           kSubmapListTopic, kLatestOnlyPublisherQueueSize);
 
-  //mesh_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_mesh", 1);
+  mesh_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_mesh", 1);
   //normal_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_normals", 1);
   tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
   submap_query_server_ = node_handle_.advertiseService(
@@ -89,7 +90,7 @@ void Node::Initialize() {
       ::ros::WallDuration(options_.submap_publish_period_sec),
       &Node::PublishSubmapList, this));  
   wall_timers_.push_back(node_handle_.createWallTimer(
-      ::ros::WallDuration(options_.submap_publish_period_sec),
+      ::ros::WallDuration(options_.submap_publish_period_sec*10.0),
       &Node::PublishTSDF, this));
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.pose_publish_period_sec),
@@ -113,18 +114,15 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 }
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
-    std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();
+    std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();    
+    LOG(INFO) << "tsdf_list.size() " << tsdf_list.size();
 
     if(tsdf_list.size() > 0){
         chisel::ChiselPtr chisel_map = tsdf_list[0];
-        std::cout<<"b"<<std::endl;
-        std::cout<<chisel_map<<std::endl;
         if(chisel_map)
         {
             const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
-            std::cout<<"c"<<std::endl;
-            const float resolution = chunkManager.GetResolution(); //crashes here
-            std::cout<<"d"<<std::endl;
+            const float resolution = chunkManager.GetResolution();
             pcl::PointCloud<pcl::PointXYZRGB> cloud;
             cloud.clear();
             int stepSize=1;
@@ -177,10 +175,105 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
             pc.header.stamp = ros::Time::now();
             tsdf_publisher_.publish(pc);
         }
-        else
-            std::cout<<"null"<<std::endl;
+        else            
+            LOG(FATAL) << "chisel_map is null";
     }
 
+
+    if(tsdf_list.size() > 0){
+        chisel::ChiselPtr chisel_map = tsdf_list[0];
+        if(chisel_map)
+        {
+            visualization_msgs::Marker marker;
+
+            marker.header.stamp = ros::Time::now();
+            marker.header.frame_id = "map";
+            marker.scale.x = 1;
+            marker.scale.y = 1;
+            marker.scale.z = 1;
+            marker.pose.orientation.x = 0;
+            marker.pose.orientation.y = 0;
+            marker.pose.orientation.z = 0;
+            marker.pose.orientation.w = 1;
+            marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+            chisel_map->UpdateMeshes();
+            const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
+            FillMarkerTopicWithMeshes(mesh_map, &marker);
+            mesh_publisher_.publish(marker);
+        }
+        else
+            LOG(FATAL) << "chisel_map is null";
+    }
+
+}
+
+chisel::Vec3 LAMBERT(const chisel::Vec3& n, const chisel::Vec3& light)
+{
+    return fmax(n.dot(light), 0.0f) * chisel::Vec3(0.5, 0.5, 0.5);
+}
+
+void Node::FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker)
+{
+    if(meshMap.size() == 0)
+    {
+        return;
+    }
+
+    chisel::Vec3 lightDir(0.8f, -0.2f, 0.7f);
+    lightDir.normalize();
+    chisel::Vec3 lightDir1(-0.5f, 0.2f, 0.2f);
+    lightDir.normalize();
+    const chisel::Vec3 ambient(0.2f, 0.2f, 0.2f);
+    //int idx = 0;
+    for (const std::pair<chisel::ChunkID, chisel::MeshPtr>& meshes : meshMap)
+    {
+        const chisel::MeshPtr& mesh = meshes.second;
+        for (size_t i = 0; i < mesh->vertices.size(); i++)
+        {
+            const chisel::Vec3& vec = mesh->vertices[i];
+            geometry_msgs::Point pt;
+            pt.x = vec[0];
+            pt.y = vec[1];
+            pt.z = vec[2];
+            marker->points.push_back(pt);
+
+            if(mesh->HasColors())
+            {
+                const chisel::Vec3& meshCol = mesh->colors[i];
+                std_msgs::ColorRGBA color;
+                color.r = meshCol[0];
+                color.g = meshCol[1];
+                color.b = meshCol[2];
+                color.a = 1.0;
+                marker->colors.push_back(color);
+            }
+            else
+            {
+              if(mesh->HasNormals())
+              {
+                  const chisel::Vec3 normal = mesh->normals[i];
+                  std_msgs::ColorRGBA color;
+                  chisel::Vec3 lambert = LAMBERT(normal, lightDir) + LAMBERT(normal, lightDir1) + ambient;
+                  color.r = fmin(lambert[0], 1.0);
+                  color.g = fmin(lambert[1], 1.0);
+                  color.b = fmin(lambert[2], 1.0);
+                  color.a = 1.0;
+                  marker->colors.push_back(color);
+              }
+              else
+              {
+                std_msgs::ColorRGBA color;
+                color.r = vec[0] * 0.25 + 0.5;
+                color.g = vec[1] * 0.25 + 0.5;
+                color.b = vec[2] * 0.25 + 0.5;
+                color.a = 1.0;
+                marker->colors.push_back(color);
+              }
+            }
+            //marker->indicies.push_back(idx);
+            //idx++;
+        }
+    }
 }
 
 void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {

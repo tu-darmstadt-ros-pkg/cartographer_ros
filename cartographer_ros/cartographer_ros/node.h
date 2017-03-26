@@ -29,6 +29,7 @@
 #include "cartographer_ros_msgs/SubmapQuery.h"
 #include "cartographer_ros_msgs/TrajectorySubmapList.h"
 #include "ros/ros.h"
+#include "visualization_msgs/Marker.h"
 #include "tf2_ros/transform_broadcaster.h"
 
 namespace cartographer_ros {
@@ -68,6 +69,7 @@ class Node {
   void PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event);
   void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
+  void FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker);
 
   const NodeOptions options_;
 
