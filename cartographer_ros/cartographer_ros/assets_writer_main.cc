@@ -26,8 +26,8 @@
 #include "cartographer/io/file_writer.h"
 #include "cartographer/io/points_processor.h"
 #include "cartographer/io/points_processor_pipeline_builder.h"
-#include "cartographer/sensor/laser.h"
 #include "cartographer/sensor/point_cloud.h"
+#include "cartographer/sensor/range_data.h"
 #include "cartographer/transform/transform_interpolation_buffer.h"
 #include "cartographer_ros/bag_reader.h"
 #include "cartographer_ros/msg_conversion.h"
@@ -58,9 +58,8 @@ DEFINE_string(bag_filename, "", "Bag to process.");
 DEFINE_string(
     trajectory_filename, "",
     "Proto containing the trajectory written by /finish_trajectory service.");
-DEFINE_bool(
-    use_bag_transforms, true,
-    "Whether to read and use the transforms from the bag.");
+DEFINE_bool(use_bag_transforms, true,
+            "Whether to read and use the transforms from the bag.");
 
 namespace cartographer_ros {
 namespace {
