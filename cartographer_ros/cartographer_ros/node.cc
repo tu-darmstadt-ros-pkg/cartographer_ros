@@ -38,6 +38,7 @@
 #include "ros/serialization.h"
 #include "sensor_msgs/PointCloud2.h"
 #include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
 #include "tf2_eigen/tf2_eigen.h"
 
 namespace cartographer_ros {
@@ -67,7 +68,7 @@ void Node::Initialize() {
       node_handle_.advertise<::cartographer_ros_msgs::SubmapList>(
           kSubmapListTopic, kLatestOnlyPublisherQueueSize);
 
-  mesh_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_mesh", 1);
+  mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("chisel_mesh", 1);
   //normal_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_normals", 1);
   tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
   submap_query_server_ = node_handle_.advertiseService(
@@ -114,95 +115,106 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 }
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
-    std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();    
-    LOG(INFO) << "tsdf_list.size() " << tsdf_list.size();
-
+    std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();
     if(tsdf_list.size() > 0){
-        chisel::ChiselPtr chisel_map = tsdf_list[0];
-        if(chisel_map)
+        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+        cloud.clear();
+        for(const chisel::ChiselPtr chisel_map : tsdf_list)
         {
-            const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
-            const float resolution = chunkManager.GetResolution();
-            pcl::PointCloud<pcl::PointXYZRGB> cloud;
-            cloud.clear();
-            int stepSize=1;
-
-            for (const std::pair<chisel::ChunkID, chisel::ChunkPtr>& pair : chunkManager.GetChunks())
+            if(chisel_map)
             {
-              const std::vector<chisel::DistVoxel>&  voxels = pair.second->GetVoxels();
-              chisel::Vec3 origin = pair.second->GetOrigin();
+                const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
+                const float resolution = chunkManager.GetResolution();
+                chisel::Vec3 map_offset = chunkManager.GetMapOffset();
+                int stepSize=1;
 
-              int voxelID = 0;
-
-              for (int z = 0; z < chunkManager.GetChunkSize()(2); z+=stepSize)
-              {
-                for (int y = 0; y < chunkManager.GetChunkSize()(1); y+=stepSize)
+                for (const std::pair<chisel::ChunkID, chisel::ChunkPtr>& pair : chunkManager.GetChunks())
                 {
-                  for (int x = 0; x < chunkManager.GetChunkSize()(0); x+=stepSize)
+                  const std::vector<chisel::DistVoxel>&  voxels = pair.second->GetVoxels();
+                  chisel::Vec3 origin = pair.second->GetOrigin();
+
+                  int voxelID = 0;
+
+                  for (int z = 0; z < chunkManager.GetChunkSize()(2); z+=stepSize)
                   {
-                    if(voxels[voxelID].GetWeight() > 0)
+                    for (int y = 0; y < chunkManager.GetChunkSize()(1); y+=stepSize)
                     {
-
-                        float sdf = voxels[voxelID].GetSDF();
-
-                        if(sdf>0)
+                      for (int x = 0; x < chunkManager.GetChunkSize()(0); x+=stepSize)
+                      {
+                        if(voxels[voxelID].GetWeight() > 0)
                         {
-                          pcl::PointXYZRGB point = pcl::PointXYZRGB(0, 0, 255);
-                          point.x = origin.x() + x *resolution;
-                          point.y = origin.y() + y *resolution;
-                          point.z = origin.z() + z *resolution;
-                          cloud.points.insert(cloud.end(), point);
+
+                            float sdf = voxels[voxelID].GetSDF();
+
+                            if(sdf>0)
+                            {
+                              pcl::PointXYZRGB point = pcl::PointXYZRGB(0, 0, 255);
+                              point.x = map_offset.x() + origin.x() + x *resolution;
+                              point.y = map_offset.y() + origin.y() + y *resolution;
+                              point.z = map_offset.z() + origin.z() + z *resolution;
+                              cloud.points.insert(cloud.end(), point);
+                            }
+                            else
+                            {
+                              pcl::PointXYZRGB point = pcl::PointXYZRGB(255, 0, 0);
+                              point.x = map_offset.x() + origin.x() + x *resolution;
+                              point.y = map_offset.y() + origin.y() + y *resolution;
+                              point.z = map_offset.z() + origin.z() + z *resolution;
+                              cloud.points.insert(cloud.end(), point);
+                            }
                         }
-                        else
-                        {
-                          pcl::PointXYZRGB point = pcl::PointXYZRGB(255, 0, 0);
-                          point.x = origin.x() + x *resolution;
-                          point.y = origin.y() + y *resolution;
-                          point.z = origin.z() + z *resolution;
-                          cloud.points.insert(cloud.end(), point);
-                        }
+
+                        voxelID+=stepSize;
+                      }
                     }
-
-                    voxelID+=stepSize;
                   }
                 }
-              }
             }
-            sensor_msgs::PointCloud2 pc;
-
-            pcl::toROSMsg(cloud, pc);
-            pc.header.frame_id = "map";
-            pc.header.stamp = ros::Time::now();
-            tsdf_publisher_.publish(pc);
         }
-        else            
-            LOG(FATAL) << "chisel_map is null";
+        sensor_msgs::PointCloud2 pc;
+        pcl::toROSMsg(cloud, pc);
+        pc.header.frame_id = "map";
+        pc.header.stamp = ros::Time::now();
+        tsdf_publisher_.publish(pc);
     }
 
 
     if(tsdf_list.size() > 0){
-        chisel::ChiselPtr chisel_map = tsdf_list[0];
-        if(chisel_map)
+        visualization_msgs::MarkerArray marker_array;
+        marker_array.markers.reserve(tsdf_list.size());
+        int id = 0;
+        for(const chisel::ChiselPtr chisel_map : tsdf_list)
         {
-            visualization_msgs::Marker marker;
-
-            marker.header.stamp = ros::Time::now();
-            marker.header.frame_id = "map";
-            marker.scale.x = 1;
-            marker.scale.y = 1;
-            marker.scale.z = 1;
-            marker.pose.orientation.x = 0;
-            marker.pose.orientation.y = 0;
-            marker.pose.orientation.z = 0;
-            marker.pose.orientation.w = 1;
-            marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
-            chisel_map->UpdateMeshes();
-            const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
-            FillMarkerTopicWithMeshes(mesh_map, &marker);
-            mesh_publisher_.publish(marker);
+            if(chisel_map)
+            {
+                const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
+                chisel::Vec3 map_offset = chunkManager.GetMapOffset();
+                visualization_msgs::Marker marker;
+                marker.header.stamp = ros::Time::now();
+                marker.header.frame_id = "map";
+                marker.id = id;
+                marker.scale.x = 1;
+                marker.scale.y = 1;
+                marker.scale.z = 1;
+                marker.pose.orientation.x = 0;
+                marker.pose.orientation.y = 0;
+                marker.pose.orientation.z = 0;
+                marker.pose.orientation.w = 1;
+                marker.pose.position.x = map_offset.x();
+                marker.pose.position.y = map_offset.y();
+                marker.pose.position.z = map_offset.z();
+                marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+                const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
+                FillMarkerTopicWithMeshes(mesh_map, &marker);
+                if(marker.points.size() > 0)
+                {
+                    marker_array.markers.push_back(marker);
+                    id++;
+                }
+            }
         }
-        else
-            LOG(FATAL) << "chisel_map is null";
+
+        mesh_publisher_.publish(marker_array);
     }
 
 }
