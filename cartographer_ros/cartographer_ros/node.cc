@@ -116,7 +116,7 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
     std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();
-    if(tsdf_list.size() > 0){
+    if(tsdf_list.size() > 0 && tsdf_publisher_.getNumSubscribers() > 0){
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
         cloud.clear();
         for(const chisel::ChiselPtr chisel_map : tsdf_list)
@@ -179,7 +179,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
     }
 
 
-    if(tsdf_list.size() > 0){
+    if(tsdf_list.size() > 0 && mesh_publisher_.getNumSubscribers() > 0){
         visualization_msgs::MarkerArray marker_array;
         marker_array.markers.reserve(tsdf_list.size());
         int id = 0;
