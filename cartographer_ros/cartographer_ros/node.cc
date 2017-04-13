@@ -110,8 +110,11 @@ bool Node::HandleSubmapQuery(
 }
 
 void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
-  carto::common::MutexLocker lock(&mutex_);
-  submap_list_publisher_.publish(map_builder_bridge_.GetSubmapList());
+
+  if(submap_list_publisher_.getNumSubscribers() > 0){
+      carto::common::MutexLocker lock(&mutex_);
+      submap_list_publisher_.publish(map_builder_bridge_.GetSubmapList());
+  }
 }
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
