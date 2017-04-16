@@ -118,11 +118,11 @@ std::vector<chisel::ChiselPtr> MapBuilderBridge::GetTSDFList() {
     for (int trajectory_id = 0;
          trajectory_id < map_builder_.num_trajectory_builders();
          ++trajectory_id) {
-        const cartographer::mapping_3d::TSDFs* tsdfs =
-               map_builder_.GetTrajectoryBuilder(trajectory_id)->tsdfs();
-        for(int submap_id = 0; submap_id < tsdfs->size(); ++submap_id)
+        const cartographer::mapping::TrajectoryBuilder* trajectory_builder =
+               map_builder_.GetTrajectoryBuilder(trajectory_id);
+        for(int submap_id = 0; submap_id < trajectory_builder->submaps()->size(); ++submap_id)
         {
-            tsdf_list.push_back(tsdfs->Get(submap_id));
+            tsdf_list.push_back(trajectory_builder->submaps()->GetChiselPtr(submap_id));
         }
     }
     return tsdf_list;

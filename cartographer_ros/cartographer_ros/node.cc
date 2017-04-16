@@ -86,16 +86,17 @@ void Node::Initialize() {
   scan_matched_point_cloud_publisher_ =
       node_handle_.advertise<sensor_msgs::PointCloud2>(
           kScanMatchedPointCloudTopic, kLatestOnlyPublisherQueueSize);
-
+/*
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.submap_publish_period_sec),
-      &Node::PublishSubmapList, this));  
+      &Node::PublishSubmapList, this));  */
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.submap_publish_period_sec*10.0),
       &Node::PublishTSDF, this));
+  /*
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.pose_publish_period_sec),
-      &Node::PublishTrajectoryStates, this));
+      &Node::PublishTrajectoryStates, this));*/
 }
 
 ::ros::NodeHandle* Node::node_handle() { return &node_handle_; }
