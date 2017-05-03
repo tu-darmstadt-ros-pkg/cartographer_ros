@@ -93,10 +93,10 @@ void Node::Initialize() {
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.submap_publish_period_sec*10.0),
       &Node::PublishTSDF, this));
-  /*
+
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.pose_publish_period_sec),
-      &Node::PublishTrajectoryStates, this));*/
+      &Node::PublishTrajectoryStates, this));
 }
 
 ::ros::NodeHandle* Node::node_handle() { return &node_handle_; }
@@ -119,22 +119,22 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 }
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
-    std::vector<chisel::ChiselPtr> tsdf_list = map_builder_bridge_.GetTSDFList();
+    std::vector<chisel::ChiselPtr<chisel::MultiDistVoxel>> tsdf_list = map_builder_bridge_.GetTSDFList();
     if(tsdf_list.size() > 0 && tsdf_publisher_.getNumSubscribers() > 0){
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
         cloud.clear();
-        for(const chisel::ChiselPtr chisel_map : tsdf_list)
+        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
             {
-                const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
+                const auto& chunkManager = chisel_map->GetChunkManager();
                 const float resolution = chunkManager.GetResolution();
-                chisel::Vec3 map_offset = chunkManager.GetMapOffset();
+                chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 int stepSize=1;
 
-                for (const std::pair<chisel::ChunkID, chisel::ChunkPtr>& pair : chunkManager.GetChunks())
+                for (const std::pair<chisel::ChunkID, chisel::ChunkPtr<chisel::MultiDistVoxel>>& pair : chunkManager.GetChunks())
                 {
-                  const std::vector<chisel::DistVoxel>&  voxels = pair.second->GetVoxels();
+                  const std::vector<chisel::MultiDistVoxel>&  voxels = pair.second->GetVoxels();
                   chisel::Vec3 origin = pair.second->GetOrigin();
 
                   int voxelID = 0;
@@ -187,12 +187,12 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
         visualization_msgs::MarkerArray marker_array;
         marker_array.markers.reserve(tsdf_list.size());
         int id = 0;
-        for(const chisel::ChiselPtr chisel_map : tsdf_list)
+        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
             {
-                const chisel::ChunkManager& chunkManager = chisel_map->GetChunkManager();
-                chisel::Vec3 map_offset = chunkManager.GetMapOffset();
+                const auto& chunkManager = chisel_map->GetChunkManager();
+                chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 visualization_msgs::Marker marker;
                 marker.header.stamp = ros::Time::now();
                 marker.header.frame_id = "map";

@@ -113,8 +113,8 @@ cartographer_ros_msgs::SubmapList MapBuilderBridge::GetSubmapList() {
   return submap_list;
 }
 
-std::vector<chisel::ChiselPtr> MapBuilderBridge::GetTSDFList() {
-    std::vector<chisel::ChiselPtr> tsdf_list;
+std::vector<chisel::ChiselPtr<chisel::MultiDistVoxel> > MapBuilderBridge::GetTSDFList() {
+    std::vector<chisel::ChiselPtr<chisel::MultiDistVoxel>> tsdf_list;
     for (int trajectory_id = 0;
          trajectory_id < map_builder_.num_trajectory_builders();
          ++trajectory_id) {
