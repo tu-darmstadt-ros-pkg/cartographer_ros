@@ -61,7 +61,7 @@ class MapBuilderBridge {
 
   SensorBridge* sensor_bridge(int trajectory_id);
 
- private:
+ public: //todo(kdaun) set to private again after testing is done
   const NodeOptions options_;
 
   std::deque<cartographer::mapping::TrajectoryNode::ConstantData>

@@ -119,12 +119,30 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 }
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
+
     std::vector<chisel::ChiselPtr<chisel::MultiDistVoxel>> tsdf_list = map_builder_bridge_.GetTSDFList();
+    int trajectory_id = 0;
+    const cartographer::mapping::Submaps* const submaps =
+            map_builder_bridge()->map_builder_.GetTrajectoryBuilder(trajectory_id)->submaps();
+
+    const std::vector<cartographer::transform::Rigid3d> submap_transforms =
+        map_builder_bridge()->map_builder_.sparse_pose_graph()->GetSubmapTransforms(*submaps);
+
     if(tsdf_list.size() > 0 && tsdf_publisher_.getNumSubscribers() > 0){
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
         cloud.clear();
+        int submap_index = 0;
         for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
         {
+            if (submap_index < 0 || submap_index >= submaps->size()) {
+              ROS_INFO( "Requested submap %i from trajectory %i but there are only %i submaps in this trajectory."
+                        ,submap_index, trajectory_id, submaps->size());
+            }
+            //if(submap_index == 3)
+            {
+                std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
+                //std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
+            }
             if(chisel_map)
             {
                 const auto& chunkManager = chisel_map->GetChunkManager();
@@ -174,6 +192,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
                   }
                 }
             }
+            submap_index++;
         }
         sensor_msgs::PointCloud2 pc;
         pcl::toROSMsg(cloud, pc);
