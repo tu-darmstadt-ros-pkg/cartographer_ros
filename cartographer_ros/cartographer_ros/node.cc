@@ -91,7 +91,7 @@ void Node::Initialize() {
       ::ros::WallDuration(options_.submap_publish_period_sec),
       &Node::PublishSubmapList, this));  */
   wall_timers_.push_back(node_handle_.createWallTimer(
-      ::ros::WallDuration(options_.submap_publish_period_sec*10.0),
+      ::ros::WallDuration(options_.submap_publish_period_sec*5.0),
       &Node::PublishTSDF, this));
 
   wall_timers_.push_back(node_handle_.createWallTimer(
@@ -140,7 +140,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
             }
             //if(submap_index == 3)
             {
-                std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
+                //std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
                 //std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
             }
             if(chisel_map)
@@ -148,6 +148,8 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
                 const auto& chunkManager = chisel_map->GetChunkManager();
                 const float resolution = chunkManager.GetResolution();
                 chisel::Vec3 map_offset = chunkManager.GetOrigin();
+               // std::cout<<"Debug string: "<<(submap_index)<<" "<<map_offset.x()<<" "<<map_offset.y()<<" "<<map_offset.z()<<std::endl;
+
                 int stepSize=1;
 
                 for (const std::pair<chisel::ChunkID, chisel::ChunkPtr<chisel::MultiDistVoxel>>& pair : chunkManager.GetChunks())
@@ -204,8 +206,41 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
 
     if(tsdf_list.size() > 0 && mesh_publisher_.getNumSubscribers() > 0){
         visualization_msgs::MarkerArray marker_array;
-        marker_array.markers.reserve(tsdf_list.size());
+        marker_array.markers.reserve(2*tsdf_list.size());
         int id = 0;
+        int submap_index = 0;
+        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
+        {
+            if(chisel_map)
+            {
+                const auto& chunkManager = chisel_map->GetChunkManager();
+                chisel::Vec3 map_offset = chunkManager.GetOrigin();
+                visualization_msgs::Marker marker;
+                marker.header.stamp = ros::Time::now();
+                marker.header.frame_id = "map";
+                marker.id = id;
+                marker.scale.x = 1;
+                marker.scale.y = 1;
+                marker.scale.z = 1;
+                marker.pose.orientation.x = submap_transforms[submap_index].rotation().x();
+                marker.pose.orientation.y = submap_transforms[submap_index].rotation().y();
+                marker.pose.orientation.z = submap_transforms[submap_index].rotation().z();
+                marker.pose.orientation.w = submap_transforms[submap_index].rotation().w();
+                marker.pose.position.x = submap_transforms[submap_index].translation().x();
+                marker.pose.position.y = submap_transforms[submap_index].translation().y();
+                marker.pose.position.z = submap_transforms[submap_index].translation().z();
+                marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+                const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
+                FillMarkerTopicWithMeshes(mesh_map, &marker);
+                if(marker.points.size() > 0)
+                {
+                    marker_array.markers.push_back(marker);
+                    id++;
+                }
+            }
+            submap_index++;
+        }
+
         for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
@@ -224,7 +259,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
                 marker.pose.orientation.z = 0;
                 marker.pose.orientation.w = 1;
                 marker.pose.position.x = map_offset.x();
-                marker.pose.position.y = map_offset.y();
+                marker.pose.position.y = map_offset.y()+8.;
                 marker.pose.position.z = map_offset.z();
                 marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
                 const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
