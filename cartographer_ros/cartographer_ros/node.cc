@@ -69,7 +69,7 @@ void Node::Initialize() {
           kSubmapListTopic, kLatestOnlyPublisherQueueSize);
 
   mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("chisel_mesh", 1);
-  //normal_publisher_ = node_handle_.advertise<visualization_msgs::Marker>("chisel_normals", 1);
+  uncorrected_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("uncorrected_chisel_mesh", 1);
   tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
   submap_query_server_ = node_handle_.advertiseService(
       kSubmapQueryServiceName, &Node::HandleSubmapQuery, this);
@@ -86,10 +86,10 @@ void Node::Initialize() {
   scan_matched_point_cloud_publisher_ =
       node_handle_.advertise<sensor_msgs::PointCloud2>(
           kScanMatchedPointCloudTopic, kLatestOnlyPublisherQueueSize);
-/*
+
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.submap_publish_period_sec),
-      &Node::PublishSubmapList, this));  */
+      &Node::PublishSubmapList, this));
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(options_.submap_publish_period_sec*5.0),
       &Node::PublishTSDF, this));
@@ -129,6 +129,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
         map_builder_bridge()->map_builder_.sparse_pose_graph()->GetSubmapTransforms(*submaps);
 
     if(tsdf_list.size() > 0 && tsdf_publisher_.getNumSubscribers() > 0){
+        //todo(kdaun) add global transform for loop closure correction
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
         cloud.clear();
         int submap_index = 0;
@@ -138,17 +139,11 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
               ROS_INFO( "Requested submap %i from trajectory %i but there are only %i submaps in this trajectory."
                         ,submap_index, trajectory_id, submaps->size());
             }
-            //if(submap_index == 3)
-            {
-                //std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
-                //std::cout<<"Debug string: "<<(submap_index)<<" "<<submap_transforms[submap_index].DebugString()<<std::endl;
-            }
             if(chisel_map)
             {
                 const auto& chunkManager = chisel_map->GetChunkManager();
                 const float resolution = chunkManager.GetResolution();
                 chisel::Vec3 map_offset = chunkManager.GetOrigin();
-               // std::cout<<"Debug string: "<<(submap_index)<<" "<<map_offset.x()<<" "<<map_offset.y()<<" "<<map_offset.z()<<std::endl;
 
                 int stepSize=1;
 
@@ -206,7 +201,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
 
     if(tsdf_list.size() > 0 && mesh_publisher_.getNumSubscribers() > 0){
         visualization_msgs::MarkerArray marker_array;
-        marker_array.markers.reserve(2*tsdf_list.size());
+        marker_array.markers.reserve(tsdf_list.size());
         int id = 0;
         int submap_index = 0;
         for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
@@ -231,7 +226,10 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
                 marker.pose.position.z = submap_transforms[submap_index].translation().z();
                 marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
                 const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
-                FillMarkerTopicWithMeshes(mesh_map, &marker);
+                FillMarkerTopicWithMeshes(mesh_map, &marker, id);
+                marker.color.r = 0.3+0.7*(id%2)/2.;
+                marker.color.g = 0.3+0.7*(id%4)/4.;
+                marker.color.b = 0.3+0.7*(id%8)/8.;
                 if(marker.points.size() > 0)
                 {
                     marker_array.markers.push_back(marker);
@@ -240,7 +238,13 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
             }
             submap_index++;
         }
+        mesh_publisher_.publish(marker_array);
+    }
 
+    if(tsdf_list.size() > 0 && uncorrected_mesh_publisher_.getNumSubscribers() > 0){
+        visualization_msgs::MarkerArray marker_array;
+        marker_array.markers.reserve(tsdf_list.size());
+        int id = tsdf_list.size();
         for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
@@ -259,7 +263,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
                 marker.pose.orientation.z = 0;
                 marker.pose.orientation.w = 1;
                 marker.pose.position.x = map_offset.x();
-                marker.pose.position.y = map_offset.y()+8.;
+                marker.pose.position.y = map_offset.y();
                 marker.pose.position.z = map_offset.z();
                 marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
                 const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
@@ -272,7 +276,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
             }
         }
 
-        mesh_publisher_.publish(marker_array);
+        uncorrected_mesh_publisher_.publish(marker_array);
     }
 
 }
@@ -282,7 +286,7 @@ chisel::Vec3 LAMBERT(const chisel::Vec3& n, const chisel::Vec3& light)
     return fmax(n.dot(light), 0.0f) * chisel::Vec3(0.5, 0.5, 0.5);
 }
 
-void Node::FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker)
+void Node::FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker, int idx)
 {
     if(meshMap.size() == 0)
     {
@@ -324,10 +328,20 @@ void Node::FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualizati
                   const chisel::Vec3 normal = mesh->normals[i];
                   std_msgs::ColorRGBA color;
                   chisel::Vec3 lambert = LAMBERT(normal, lightDir) + LAMBERT(normal, lightDir1) + ambient;
-                  color.r = fmin(lambert[0], 1.0);
-                  color.g = fmin(lambert[1], 1.0);
-                  color.b = fmin(lambert[2], 1.0);
-                  color.a = 1.0;
+                  if(idx == -1)
+                  {
+                      color.r = fmin(lambert[0], 1.0);
+                      color.g = fmin(lambert[1], 1.0);
+                      color.b = fmin(lambert[2], 1.0);
+                      color.a = 1.0;
+                  }
+                  else
+                  {
+                      color.r = (0.3+0.7*(((1+idx)%3)/2))*fmin(lambert[0], 1.0);
+                      color.g = (0.3+0.7*(((2+idx)%5)/4))*fmin(lambert[1], 1.0);
+                      color.b = (0.3+0.7*(((4+idx)%9)/8))*fmin(lambert[2], 1.0);
+                      color.a = 1.0;
+                  }
                   marker->colors.push_back(color);
               }
               else
@@ -340,8 +354,6 @@ void Node::FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualizati
                 marker->colors.push_back(color);
               }
             }
-            //marker->indicies.push_back(idx);
-            //idx++;
         }
     }
 }

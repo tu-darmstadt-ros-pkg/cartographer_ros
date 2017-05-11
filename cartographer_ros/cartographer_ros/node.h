@@ -69,7 +69,7 @@ class Node {
   void PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event);
   void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
-  void FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker);
+  void FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker, int idx = -1);
 
   const NodeOptions options_;
 
@@ -89,6 +89,7 @@ class Node {
 
 
   ::ros::Publisher mesh_publisher_;
+  ::ros::Publisher uncorrected_mesh_publisher_;
   ::ros::Publisher normal_publisher_;
   ::ros::Publisher tsdf_publisher_;
 
