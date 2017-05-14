@@ -90,6 +90,7 @@ class Node {
 
   ::ros::Publisher mesh_publisher_;
   ::ros::Publisher uncorrected_mesh_publisher_;
+  ::ros::Publisher debug_mesh_publisher_;
   ::ros::Publisher normal_publisher_;
   ::ros::Publisher tsdf_publisher_;
 

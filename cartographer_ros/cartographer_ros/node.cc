@@ -70,6 +70,7 @@ void Node::Initialize() {
 
   mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("chisel_mesh", 1);
   uncorrected_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("uncorrected_chisel_mesh", 1);
+  debug_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("debug_chisel_mesh", 1);
   tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
   submap_query_server_ = node_handle_.advertiseService(
       kSubmapQueryServiceName, &Node::HandleSubmapQuery, this);
@@ -227,9 +228,6 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
                 marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
                 const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
                 FillMarkerTopicWithMeshes(mesh_map, &marker, id);
-                marker.color.r = 0.3+0.7*(id%2)/2.;
-                marker.color.g = 0.3+0.7*(id%4)/4.;
-                marker.color.b = 0.3+0.7*(id%8)/8.;
                 if(marker.points.size() > 0)
                 {
                     marker_array.markers.push_back(marker);
@@ -238,7 +236,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
             }
             submap_index++;
         }
-        mesh_publisher_.publish(marker_array);
+        debug_mesh_publisher_.publish(marker_array);
     }
 
     if(tsdf_list.size() > 0 && uncorrected_mesh_publisher_.getNumSubscribers() > 0){
@@ -277,6 +275,45 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
         }
 
         uncorrected_mesh_publisher_.publish(marker_array);
+    }
+
+    if(tsdf_list.size() > 0 && mesh_publisher_.getNumSubscribers() > 0){
+        visualization_msgs::MarkerArray marker_array;
+        marker_array.markers.reserve(tsdf_list.size());
+        int id = 2*tsdf_list.size();
+        int submap_index = 0;
+        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
+        {
+            if(chisel_map)
+            {
+                const auto& chunkManager = chisel_map->GetChunkManager();
+                chisel::Vec3 map_offset = chunkManager.GetOrigin();
+                visualization_msgs::Marker marker;
+                marker.header.stamp = ros::Time::now();
+                marker.header.frame_id = "map";
+                marker.id = id;
+                marker.scale.x = 1;
+                marker.scale.y = 1;
+                marker.scale.z = 1;
+                marker.pose.orientation.x = submap_transforms[submap_index].rotation().x();
+                marker.pose.orientation.y = submap_transforms[submap_index].rotation().y();
+                marker.pose.orientation.z = submap_transforms[submap_index].rotation().z();
+                marker.pose.orientation.w = submap_transforms[submap_index].rotation().w();
+                marker.pose.position.x = submap_transforms[submap_index].translation().x();
+                marker.pose.position.y = submap_transforms[submap_index].translation().y();
+                marker.pose.position.z = submap_transforms[submap_index].translation().z();
+                marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+                const chisel::MeshMap& mesh_map = chisel_map->GetChunkManager().GetAllMeshes();
+                FillMarkerTopicWithMeshes(mesh_map, &marker);
+                if(marker.points.size() > 0)
+                {
+                    marker_array.markers.push_back(marker);
+                    id++;
+                }
+            }
+            submap_index++;
+        }
+        mesh_publisher_.publish(marker_array);
     }
 
 }
