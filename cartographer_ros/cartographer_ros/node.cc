@@ -121,7 +121,7 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 
 void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
 
-    std::vector<chisel::ChiselPtr<chisel::MultiDistVoxel>> tsdf_list = map_builder_bridge_.GetTSDFList();
+    std::vector<chisel::ChiselPtr<chisel::DistVoxel>> tsdf_list = map_builder_bridge_.GetTSDFList();
     int trajectory_id = 0;
     const cartographer::mapping::Submaps* const submaps =
             map_builder_bridge()->map_builder_.GetTrajectoryBuilder(trajectory_id)->submaps();
@@ -134,7 +134,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
         cloud.clear();
         int submap_index = 0;
-        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
+        for(const chisel::ChiselPtr<chisel::DistVoxel> chisel_map : tsdf_list)
         {
             if (submap_index < 0 || submap_index >= submaps->size()) {
               ROS_INFO( "Requested submap %i from trajectory %i but there are only %i submaps in this trajectory."
@@ -148,9 +148,9 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
 
                 int stepSize=1;
 
-                for (const std::pair<chisel::ChunkID, chisel::ChunkPtr<chisel::MultiDistVoxel>>& pair : chunkManager.GetChunks())
+                for (const std::pair<chisel::ChunkID, chisel::ChunkPtr<chisel::DistVoxel>>& pair : chunkManager.GetChunks())
                 {
-                  const std::vector<chisel::MultiDistVoxel>&  voxels = pair.second->GetVoxels();
+                  const std::vector<chisel::DistVoxel>&  voxels = pair.second->GetVoxels();
                   chisel::Vec3 origin = pair.second->GetOrigin();
 
                   int voxelID = 0;
@@ -200,12 +200,12 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
     }
 
 
-    if(tsdf_list.size() > 0 && mesh_publisher_.getNumSubscribers() > 0){
+    if(tsdf_list.size() > 0 && debug_mesh_publisher_.getNumSubscribers() > 0){
         visualization_msgs::MarkerArray marker_array;
         marker_array.markers.reserve(tsdf_list.size());
         int id = 0;
         int submap_index = 0;
-        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
+        for(const chisel::ChiselPtr<chisel::DistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
             {
@@ -243,7 +243,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
         visualization_msgs::MarkerArray marker_array;
         marker_array.markers.reserve(tsdf_list.size());
         int id = tsdf_list.size();
-        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
+        for(const chisel::ChiselPtr<chisel::DistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
             {
@@ -282,7 +282,7 @@ void Node::PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event) {
         marker_array.markers.reserve(tsdf_list.size());
         int id = 2*tsdf_list.size();
         int submap_index = 0;
-        for(const chisel::ChiselPtr<chisel::MultiDistVoxel> chisel_map : tsdf_list)
+        for(const chisel::ChiselPtr<chisel::DistVoxel> chisel_map : tsdf_list)
         {
             if(chisel_map)
             {
