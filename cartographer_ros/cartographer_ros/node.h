@@ -67,6 +67,7 @@ class Node {
 
   void PublishSubmapList(const ::ros::WallTimerEvent& timer_event);
   void PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event);
+  void PublishScanStates(const ::ros::WallTimerEvent& timer_event);
   void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
   void FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker, int idx = -1);
@@ -93,6 +94,9 @@ class Node {
   ::ros::Publisher debug_mesh_publisher_;
   ::ros::Publisher normal_publisher_;
   ::ros::Publisher tsdf_publisher_;
+  ::ros::Publisher aggregated_scan_publisher_;
+  ::ros::Publisher raw_aggregated_scan_publisher_;
+  ::ros::Publisher matched_batch_publisher_;
 
   ::ros::Publisher occupancy_grid_publisher_;
   std::thread occupancy_grid_thread_;

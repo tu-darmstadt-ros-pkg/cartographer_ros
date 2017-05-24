@@ -72,6 +72,9 @@ void Node::Initialize() {
   uncorrected_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("uncorrected_chisel_mesh", 1);
   debug_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("debug_chisel_mesh", 1);
   tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
+  aggregated_scan_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("aggregated_scan", 1);
+  raw_aggregated_scan_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("raw_aggregated_scan", 1);
+  matched_batch_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("matched_batch", 1);
   submap_query_server_ = node_handle_.advertiseService(
       kSubmapQueryServiceName, &Node::HandleSubmapQuery, this);
 
@@ -396,6 +399,66 @@ void Node::FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualizati
 }
 
 void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
+  carto::common::MutexLocker lock(&mutex_);
+  for (const auto& entry : map_builder_bridge_.GetTrajectoryStates()) {
+    const auto& trajectory_state = entry.second;
+
+    geometry_msgs::TransformStamped stamped_transform;
+    stamped_transform.header.stamp = ToRos(trajectory_state.pose_estimate.time);
+
+    const auto& tracking_to_local = trajectory_state.pose_estimate.pose;
+    const Rigid3d tracking_to_map =
+        trajectory_state.local_to_map * tracking_to_local;
+
+    // We only publish a point cloud if it has changed. It is not needed at high
+    // frequency, and republishing it would be computationally wasteful.
+    if (trajectory_state.pose_estimate.time !=
+        last_scan_matched_point_cloud_time_) {
+      scan_matched_point_cloud_publisher_.publish(ToPointCloud2Message(
+          carto::common::ToUniversal(trajectory_state.pose_estimate.time),
+          options_.tracking_frame,
+          carto::sensor::TransformPointCloud(
+              trajectory_state.pose_estimate.point_cloud,
+              tracking_to_local.inverse().cast<float>())));
+      last_scan_matched_point_cloud_time_ = trajectory_state.pose_estimate.time;
+    } else {
+      // If we do not publish a new point cloud, we still allow time of the
+      // published poses to advance.
+      stamped_transform.header.stamp = ros::Time::now();
+    }
+
+    if (trajectory_state.published_to_tracking != nullptr) {
+      if (options_.provide_odom_frame) {
+        std::vector<geometry_msgs::TransformStamped> stamped_transforms;
+
+        stamped_transform.header.frame_id = options_.map_frame;
+        // TODO(damonkohler): 'odom_frame' and 'published_frame' must be
+        // per-trajectory to fully support the multi-robot use case.
+        stamped_transform.child_frame_id = options_.odom_frame;
+        stamped_transform.transform =
+            ToGeometryMsgTransform(trajectory_state.local_to_map);
+        stamped_transforms.push_back(stamped_transform);
+
+        stamped_transform.header.frame_id = options_.odom_frame;
+        stamped_transform.child_frame_id = options_.published_frame;
+        stamped_transform.transform = ToGeometryMsgTransform(
+            tracking_to_local * (*trajectory_state.published_to_tracking));
+        stamped_transforms.push_back(stamped_transform);
+
+        tf_broadcaster_.sendTransform(stamped_transforms);
+      } else {
+        stamped_transform.header.frame_id = options_.map_frame;
+        stamped_transform.child_frame_id = options_.published_frame;
+        stamped_transform.transform = ToGeometryMsgTransform(
+            tracking_to_map * (*trajectory_state.published_to_tracking));
+        tf_broadcaster_.sendTransform(stamped_transform);
+      }
+    }
+  }
+}
+
+
+void Node::PublishScanStates(const ::ros::WallTimerEvent& timer_event) {
   carto::common::MutexLocker lock(&mutex_);
   for (const auto& entry : map_builder_bridge_.GetTrajectoryStates()) {
     const auto& trajectory_state = entry.second;
