@@ -42,7 +42,7 @@ SensorBridge::SensorBridge(
     tf2_ros::Buffer* const tf_buffer,
     carto::mapping::TrajectoryBuilder* const trajectory_builder)
     : tf_bridge_(tracking_frame, lookup_transform_timeout_sec, tf_buffer),
-      trajectory_builder_(trajectory_builder) {}
+      trajectory_builder_(trajectory_builder), last_range_data_time(0) {}
 
 void SensorBridge::HandleOdometryMessage(
     const string& sensor_id, const nav_msgs::Odometry::ConstPtr& msg) {
@@ -99,6 +99,16 @@ void SensorBridge::HandleMultiEchoLaserScanMessage(
 
 void SensorBridge::HandlePointCloud2Message(
     const string& sensor_id, const sensor_msgs::PointCloud2::ConstPtr& msg) {
+  if(last_range_data_time >msg->header.stamp)
+  {
+      ROS_WARN("Dropping pointcloud to maintain time consistency.");
+      return;
+  }
+  else
+  {
+      last_range_data_time = msg->header.stamp;
+  }
+
   pcl::PointCloud<pcl::PointXYZ> pcl_point_cloud;
   pcl::fromROSMsg(*msg, pcl_point_cloud);
   carto::sensor::PointCloud point_cloud;

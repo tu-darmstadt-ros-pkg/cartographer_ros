@@ -58,14 +58,22 @@ class MapBuilderBridge {
       cartographer_ros_msgs::SubmapQuery::Response& response);
 
   cartographer_ros_msgs::SubmapList GetSubmapList();
+  std::vector<chisel::ChiselPtr<chisel::DistVoxel>> GetTSDFList();
   std::unique_ptr<nav_msgs::OccupancyGrid> BuildOccupancyGrid();
   std::unordered_map<int, TrajectoryState> GetTrajectoryStates();
-  std::vector<chisel::ChiselPtr<chisel::DistVoxel>> GetTSDFList();
 
   SensorBridge* sensor_bridge(int trajectory_id);
 
+<<<<<<< HEAD
  public: //todo(kdaun) set to private again after testing is done
+  const NodeOptions options_;
+
+  std::deque<cartographer::mapping::TrajectoryNode::ConstantData>
+      constant_data_;
+=======
+ private:
   const NodeOptions node_options_;
+>>>>>>> master
   cartographer::mapping::MapBuilder map_builder_;
   tf2_ros::Buffer* const tf_buffer_;
 
