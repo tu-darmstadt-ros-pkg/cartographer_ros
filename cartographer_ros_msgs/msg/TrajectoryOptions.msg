@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Copyright 2016 The Cartographer Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Cache intermediate Docker layers. For a description of how this works, see:
-# https://giorgos.sealabs.net/docker-cache-on-travis-and-docker-112.html
+string tracking_frame
+string published_frame
+string odom_frame
+bool provide_odom_frame
+bool use_odometry
+bool use_laser_scan
+bool use_multi_echo_laser_scan
+int32 num_point_clouds
 
-set -o errexit
-set -o verbose
-set -o pipefail
-
-if [[ ${TRAVIS_BRANCH} == "master" ]] &&
-    [[ ${TRAVIS_PULL_REQUEST} == "false" ]]; then
-  mkdir -p $(dirname ${DOCKER_CACHE_FILE})
-  IMAGE_NAMES=$(docker history -q cartographer_ros:${ROS_RELEASE} | grep -v '<missing>')
-  docker save ${IMAGE_NAMES} | gzip > ${DOCKER_CACHE_FILE}.new
-  mv ${DOCKER_CACHE_FILE}.new ${DOCKER_CACHE_FILE}
-fi
+# This is a binary-encoded
+# 'cartographer.mapping.proto.TrajectoryBuilderOptions' proto.
+string trajectory_builder_options_proto

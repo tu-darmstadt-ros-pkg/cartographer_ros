@@ -29,7 +29,6 @@
 #include "cartographer/sensor/point_cloud.h"
 #include "cartographer/sensor/range_data.h"
 #include "cartographer/transform/transform_interpolation_buffer.h"
-#include "cartographer_ros/bag_reader.h"
 #include "cartographer_ros/msg_conversion.h"
 #include "cartographer_ros/time_conversion.h"
 #include "cartographer_ros/urdf_reader.h"
@@ -64,30 +63,39 @@ DEFINE_bool(use_bag_transforms, true,
 namespace cartographer_ros {
 namespace {
 
+constexpr char kTfStaticTopic[] = "/tf_static";
 namespace carto = ::cartographer;
 
-carto::sensor::PointCloudWithIntensities ToPointCloudWithIntensities(
-    const sensor_msgs::PointCloud2::ConstPtr& message) {
-  pcl::PointCloud<pcl::PointXYZ> pcl_point_cloud;
-  pcl::fromROSMsg(*message, pcl_point_cloud);
-  carto::sensor::PointCloudWithIntensities point_cloud;
+// TODO(hrapp): We discovered that using tf_buffer with a large CACHE
+// is very inefficient. Switch asset writer to use our own
+// TransformInterpolationBuffer.
+void ReadTransformsFromBag(const string& bag_filename,
+                           tf2_ros::Buffer* const tf_buffer) {
+  rosbag::Bag bag;
+  bag.open(bag_filename, rosbag::bagmode::Read);
+  rosbag::View view(bag);
 
-  // TODO(hrapp): How to get reflectivities from PCL?
-  for (const auto& point : pcl_point_cloud) {
-    point_cloud.points.emplace_back(point.x, point.y, point.z);
-    point_cloud.intensities.push_back(1.);
+  const ::ros::Time begin_time = view.getBeginTime();
+  const double duration_in_seconds = (view.getEndTime() - begin_time).toSec();
+  for (const rosbag::MessageInstance& msg : view) {
+    if (msg.isType<tf2_msgs::TFMessage>()) {
+      const auto tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
+      for (const auto& transform : tf_msg->transforms) {
+        try {
+          // TODO(damonkohler): Handle topic remapping.
+          tf_buffer->setTransform(transform, "unused_authority",
+                                  msg.getTopic() == kTfStaticTopic);
+        } catch (const tf2::TransformException& ex) {
+          LOG(WARNING) << ex.what();
+        }
+      }
+    }
+    LOG_EVERY_N(INFO, 100000)
+        << "Processed " << (msg.getTime() - begin_time).toSec() << " of "
+        << duration_in_seconds << " bag time seconds...";
   }
-  return point_cloud;
-}
 
-carto::sensor::PointCloudWithIntensities ToPointCloudWithIntensities(
-    const sensor_msgs::MultiEchoLaserScan::ConstPtr& message) {
-  return carto::sensor::ToPointCloudWithIntensities(ToCartographer(*message));
-}
-
-carto::sensor::PointCloudWithIntensities ToPointCloudWithIntensities(
-    const sensor_msgs::LaserScan::ConstPtr& message) {
-  return carto::sensor::ToPointCloudWithIntensities(ToCartographer(*message));
+  bag.close();
 }
 
 template <typename T>
@@ -97,7 +105,7 @@ void HandleMessage(
     const carto::transform::TransformInterpolationBuffer&
         transform_interpolation_buffer,
     const std::vector<std::unique_ptr<carto::io::PointsProcessor>>& pipeline) {
-  const carto::common::Time time = FromRos(message->header.stamp);
+  const carto::common::Time time = FromRos(message.header.stamp);
   if (!transform_interpolation_buffer.Has(time)) {
     return;
   }
@@ -106,14 +114,14 @@ void HandleMessage(
       transform_interpolation_buffer.Lookup(time);
   const carto::transform::Rigid3d sensor_to_tracking =
       ToRigid3d(tf_buffer.lookupTransform(
-          tracking_frame, message->header.frame_id, message->header.stamp));
+          tracking_frame, message.header.frame_id, message.header.stamp));
   const carto::transform::Rigid3f sensor_to_map =
       (tracking_to_map * sensor_to_tracking).cast<float>();
 
   auto batch = carto::common::make_unique<carto::io::PointsBatch>();
   batch->time = time;
   batch->origin = sensor_to_map * Eigen::Vector3f::Zero();
-  batch->frame_id = message->header.frame_id;
+  batch->frame_id = message.header.frame_id;
 
   carto::sensor::PointCloudWithIntensities point_cloud =
       ToPointCloudWithIntensities(message);
@@ -152,16 +160,15 @@ void Run(const string& trajectory_filename, const string& bag_filename,
       builder.CreatePipeline(
           lua_parameter_dictionary.GetDictionary("pipeline").get());
 
-  auto tf_buffer =
-      ::cartographer::common::make_unique<tf2_ros::Buffer>(::ros::DURATION_MAX);
+  tf2_ros::Buffer tf_buffer(::ros::DURATION_MAX);
 
   if (FLAGS_use_bag_transforms) {
     LOG(INFO) << "Pre-loading transforms from bag...";
-    ReadTransformsFromBag(bag_filename, tf_buffer.get());
+    ReadTransformsFromBag(bag_filename, &tf_buffer);
   }
 
   if (!urdf_filename.empty()) {
-    ReadStaticTransformsFromUrdf(urdf_filename, tf_buffer.get());
+    ReadStaticTransformsFromUrdf(urdf_filename, &tf_buffer);
   }
 
   const string tracking_frame =
@@ -179,18 +186,18 @@ void Run(const string& trajectory_filename, const string& bag_filename,
 
     for (const rosbag::MessageInstance& message : view) {
       if (message.isType<sensor_msgs::PointCloud2>()) {
-        HandleMessage(message.instantiate<sensor_msgs::PointCloud2>(),
-                      tracking_frame, *tf_buffer,
+        HandleMessage(*message.instantiate<sensor_msgs::PointCloud2>(),
+                      tracking_frame, tf_buffer,
                       *transform_interpolation_buffer, pipeline);
       }
       if (message.isType<sensor_msgs::MultiEchoLaserScan>()) {
-        HandleMessage(message.instantiate<sensor_msgs::MultiEchoLaserScan>(),
-                      tracking_frame, *tf_buffer,
+        HandleMessage(*message.instantiate<sensor_msgs::MultiEchoLaserScan>(),
+                      tracking_frame, tf_buffer,
                       *transform_interpolation_buffer, pipeline);
       }
       if (message.isType<sensor_msgs::LaserScan>()) {
-        HandleMessage(message.instantiate<sensor_msgs::LaserScan>(),
-                      tracking_frame, *tf_buffer,
+        HandleMessage(*message.instantiate<sensor_msgs::LaserScan>(),
+                      tracking_frame, tf_buffer,
                       *transform_interpolation_buffer, pipeline);
       }
       LOG_EVERY_N(INFO, 100000)

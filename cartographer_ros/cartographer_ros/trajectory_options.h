@@ -14,17 +14,33 @@
  * limitations under the License.
  */
 
-#ifndef CARTOGRAPHER_ROS_BAG_READER_H_
-#define CARTOGRAPHER_ROS_BAG_READER_H_
+#ifndef CARTOGRAPHER_ROS_TRAJECTORY_OPTIONS_H_
+#define CARTOGRAPHER_ROS_TRAJECTORY_OPTIONS_H_
 
+#include <string>
+
+#include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/port.h"
-#include "tf2_ros/buffer.h"
+#include "cartographer_ros/sensor_bridge.h"
 
 namespace cartographer_ros {
 
-void ReadTransformsFromBag(const string& bag_filename,
-                           tf2_ros::Buffer* const tf_buffer);
+struct TrajectoryOptions {
+  ::cartographer::mapping::proto::TrajectoryBuilderOptions
+      trajectory_builder_options;
+  string tracking_frame;
+  string published_frame;
+  string odom_frame;
+  bool provide_odom_frame;
+  bool use_odometry;
+  bool use_laser_scan;
+  bool use_multi_echo_laser_scan;
+  int num_point_clouds;
+};
+
+TrajectoryOptions CreateTrajectoryOptions(
+    ::cartographer::common::LuaParameterDictionary* lua_parameter_dictionary);
 
 }  // namespace cartographer_ros
 
-#endif  // CARTOGRAPHER_ROS_BAG_READER_H_
+#endif  // CARTOGRAPHER_ROS_TRAJECTORY_OPTIONS_H_

@@ -27,12 +27,16 @@ add_message_files(
     SubmapList.msg
     TrajectorySubmapList.msg
     SubmapEntry.msg
+    SensorTopics.msg
+    TrajectoryOptions.msg
 )
 
 add_service_files(
   FILES
     SubmapQuery.srv
     FinishTrajectory.srv
+    StartTrajectory.srv
+    WriteAssets.srv
 )
 
 generate_messages(

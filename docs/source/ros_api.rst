@@ -88,11 +88,17 @@ Services
 submap_query (`cartographer_ros_msgs/SubmapQuery`_)
   Fetches the requested submap.
 
+start_trajectory (`cartographer_ros_msgs/StartTrajectory`_)
+  Starts another trajectory by specifying its sensor topics and trajectory
+  options as an binary-encoded proto. Returns an assigned trajectory ID.
+
 finish_trajectory (`cartographer_ros_msgs/FinishTrajectory`_)
-  Finishes the current trajectory by flushing all queued sensor data, running a
-  final optimization, and writing artifacts (e.g. the map) to disk. The `stem`
-  argument is used as a prefix for the various files which are written. Files
-  will usually end up in `~/.ros` or `ROS_HOME` if it is set.
+  Finishes the given `trajectory_id`'s trajectory by running a final optimization.
+
+write_assets (`cartographer_ros_msgs/WriteAssets`_)
+  Writes artifacts (e.g. the map) to disk. The `stem` argument is used as a prefix
+  for the various files which are written. Files will usually end up in `~/.ros` or
+  `ROS_HOME` if it is set.
 
 Required tf Transforms
 ======================
@@ -118,6 +124,8 @@ If *provide_odom_frame* is enabled in the :doc:`configuration`, a continuous
 .. _cartographer_ros_msgs/FinishTrajectory: https://github.com/googlecartographer/cartographer_ros/blob/master/cartographer_ros_msgs/srv/FinishTrajectory.srv
 .. _cartographer_ros_msgs/SubmapList: https://github.com/googlecartographer/cartographer_ros/blob/master/cartographer_ros_msgs/msg/SubmapList.msg
 .. _cartographer_ros_msgs/SubmapQuery: https://github.com/googlecartographer/cartographer_ros/blob/master/cartographer_ros_msgs/srv/SubmapQuery.srv
+.. _cartographer_ros_msgs/StartTrajectory: https://github.com/googlecartographer/cartographer_ros/blob/master/cartographer_ros_msgs/srv/StartTrajectory.srv
+.. _cartographer_ros_msgs/WriteAssets: https://github.com/googlecartographer/cartographer_ros/blob/master/cartographer_ros_msgs/srv/WriteAssets.srv
 .. _nav_msgs/OccupancyGrid: http://docs.ros.org/api/nav_msgs/html/msg/OccupancyGrid.html
 .. _nav_msgs/Odometry: http://docs.ros.org/api/nav_msgs/html/msg/Odometry.html
 .. _sensor_msgs/Imu: http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html

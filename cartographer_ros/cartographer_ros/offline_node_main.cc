@@ -23,8 +23,8 @@
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/make_unique.h"
 #include "cartographer/common/port.h"
-#include "cartographer_ros/bag_reader.h"
 #include "cartographer_ros/node.h"
+#include "cartographer_ros/node_options.h"
 #include "cartographer_ros/ros_log_sink.h"
 #include "cartographer_ros/urdf_reader.h"
 #include "gflags/gflags.h"
@@ -53,9 +53,10 @@ DEFINE_bool(use_bag_transforms, true,
 namespace cartographer_ros {
 namespace {
 
-constexpr int kLatestOnlyPublisherQueueSize = 1;
 constexpr char kClockTopic[] = "clock";
+constexpr char kTfStaticTopic[] = "/tf_static";
 constexpr char kTfTopic[] = "tf";
+constexpr int kLatestOnlyPublisherQueueSize = 1;
 
 volatile std::sig_atomic_t sigint_triggered = 0;
 
@@ -71,7 +72,9 @@ std::vector<string> SplitString(const string& input, const char delimiter) {
   return tokens;
 }
 
-NodeOptions LoadOptions() {
+// TODO(hrapp): This is duplicated in node_main.cc. Pull out into a config
+// unit.
+std::tuple<NodeOptions, TrajectoryOptions> LoadOptions() {
   auto file_resolver = cartographer::common::make_unique<
       cartographer::common::ConfigurationFileResolver>(
       std::vector<string>{FLAGS_configuration_directory});
@@ -80,36 +83,30 @@ NodeOptions LoadOptions() {
   cartographer::common::LuaParameterDictionary lua_parameter_dictionary(
       code, std::move(file_resolver));
 
-  return CreateNodeOptions(&lua_parameter_dictionary);
+  return std::make_tuple(CreateNodeOptions(&lua_parameter_dictionary),
+                         CreateTrajectoryOptions(&lua_parameter_dictionary));
 }
 
 void Run(const std::vector<string>& bag_filenames) {
-  auto options = LoadOptions();
+  NodeOptions node_options;
+  TrajectoryOptions trajectory_options;
+  std::tie(node_options, trajectory_options) = LoadOptions();
 
-  auto tf_buffer =
-      ::cartographer::common::make_unique<tf2_ros::Buffer>(::ros::DURATION_MAX);
-
-  if (FLAGS_use_bag_transforms) {
-    LOG(INFO) << "Pre-loading transforms from bag...";
-    // TODO(damonkohler): Support multi-trajectory.
-    CHECK_EQ(bag_filenames.size(), 1);
-    ReadTransformsFromBag(bag_filenames.back(), tf_buffer.get());
-  }
+  tf2_ros::Buffer tf_buffer;
 
   std::vector<geometry_msgs::TransformStamped> urdf_transforms;
   if (!FLAGS_urdf_filename.empty()) {
     urdf_transforms =
-        ReadStaticTransformsFromUrdf(FLAGS_urdf_filename, tf_buffer.get());
+        ReadStaticTransformsFromUrdf(FLAGS_urdf_filename, &tf_buffer);
   }
 
-  tf_buffer->setUsingDedicatedThread(true);
+  tf_buffer.setUsingDedicatedThread(true);
 
   // Since we preload the transform buffer, we should never have to wait for a
   // transform. When we finish processing the bag, we will simply drop any
   // remaining sensor data that cannot be transformed due to missing transforms.
-  options.lookup_transform_timeout_sec = 0.;
-  Node node(options, tf_buffer.get());
-  node.Initialize();
+  node_options.lookup_transform_timeout_sec = 0.;
+  Node node(node_options, &tf_buffer);
 
   std::unordered_set<string> expected_sensor_ids;
   const auto check_insert = [&expected_sensor_ids, &node](const string& topic) {
@@ -118,18 +115,19 @@ void Run(const std::vector<string>& bag_filenames) {
   };
 
   // For 2D SLAM, subscribe to exactly one horizontal laser.
-  if (options.use_laser_scan) {
+  if (trajectory_options.use_laser_scan) {
     check_insert(kLaserScanTopic);
   }
-  if (options.use_multi_echo_laser_scan) {
+  if (trajectory_options.use_multi_echo_laser_scan) {
     check_insert(kMultiEchoLaserScanTopic);
   }
 
   // For 3D SLAM, subscribe to all point clouds topics.
-  if (options.num_point_clouds > 0) {
-    for (int i = 0; i < options.num_point_clouds; ++i) {
+  if (trajectory_options.num_point_clouds > 0) {
+    for (int i = 0; i < trajectory_options.num_point_clouds; ++i) {
+      // TODO(hrapp): This code is duplicated in places. Pull out a method.
       string topic = kPointCloud2Topic;
-      if (options.num_point_clouds > 1) {
+      if (trajectory_options.num_point_clouds > 1) {
         topic += "_" + std::to_string(i + 1);
       }
       check_insert(topic);
@@ -138,15 +136,16 @@ void Run(const std::vector<string>& bag_filenames) {
 
   // For 2D SLAM, subscribe to the IMU if we expect it. For 3D SLAM, the IMU is
   // required.
-  if (options.map_builder_options.use_trajectory_builder_3d() ||
-      (options.map_builder_options.use_trajectory_builder_2d() &&
-       options.map_builder_options.trajectory_builder_2d_options()
+  if (node_options.map_builder_options.use_trajectory_builder_3d() ||
+      (node_options.map_builder_options.use_trajectory_builder_2d() &&
+       trajectory_options.trajectory_builder_options
+           .trajectory_builder_2d_options()
            .use_imu_data())) {
     check_insert(kImuTopic);
   }
 
   // For both 2D and 3D SLAM, odometry is optional.
-  if (options.use_odometry) {
+  if (trajectory_options.use_odometry) {
     check_insert(kOdometryTopic);
   }
 
@@ -170,7 +169,7 @@ void Run(const std::vector<string>& bag_filenames) {
     }
 
     const int trajectory_id = node.map_builder_bridge()->AddTrajectory(
-        expected_sensor_ids, options.tracking_frame);
+        expected_sensor_ids, trajectory_options);
 
     rosbag::Bag bag;
     bag.open(bag_filename, rosbag::bagmode::Read);
@@ -178,6 +177,10 @@ void Run(const std::vector<string>& bag_filenames) {
     const ::ros::Time begin_time = view.getBeginTime();
     const double duration_in_seconds = (view.getEndTime() - begin_time).toSec();
 
+    // We make sure that tf_messages are published before any data messages, so
+    // that tf lookups always work and that tf_buffer has a small cache size -
+    // because it gets very inefficient with a large one.
+    std::deque<rosbag::MessageInstance> delayed_messages;
     for (const rosbag::MessageInstance& msg : view) {
       if (sigint_triggered) {
         break;
@@ -186,6 +189,55 @@ void Run(const std::vector<string>& bag_filenames) {
       if (FLAGS_use_bag_transforms && msg.isType<tf2_msgs::TFMessage>()) {
         auto tf_message = msg.instantiate<tf2_msgs::TFMessage>();
         tf_publisher.publish(tf_message);
+
+        for (const auto& transform : tf_message->transforms) {
+          try {
+            tf_buffer.setTransform(transform, "unused_authority",
+                                   msg.getTopic() == kTfStaticTopic);
+          } catch (const tf2::TransformException& ex) {
+            LOG(WARNING) << ex.what();
+          }
+        }
+      }
+
+      while (!delayed_messages.empty() &&
+             delayed_messages.front().getTime() <
+                 msg.getTime() + ::ros::Duration(1.)) {
+        const rosbag::MessageInstance& delayed_msg = delayed_messages.front();
+        const string topic = node.node_handle()->resolveName(
+            delayed_msg.getTopic(), false /* resolve */);
+        if (delayed_msg.isType<sensor_msgs::LaserScan>()) {
+          node.map_builder_bridge()
+              ->sensor_bridge(trajectory_id)
+              ->HandleLaserScanMessage(
+                  topic, delayed_msg.instantiate<sensor_msgs::LaserScan>());
+        }
+        if (delayed_msg.isType<sensor_msgs::MultiEchoLaserScan>()) {
+          node.map_builder_bridge()
+              ->sensor_bridge(trajectory_id)
+              ->HandleMultiEchoLaserScanMessage(
+                  topic,
+                  delayed_msg.instantiate<sensor_msgs::MultiEchoLaserScan>());
+        }
+        if (delayed_msg.isType<sensor_msgs::PointCloud2>()) {
+          node.map_builder_bridge()
+              ->sensor_bridge(trajectory_id)
+              ->HandlePointCloud2Message(
+                  topic, delayed_msg.instantiate<sensor_msgs::PointCloud2>());
+        }
+        if (delayed_msg.isType<sensor_msgs::Imu>()) {
+          node.map_builder_bridge()
+              ->sensor_bridge(trajectory_id)
+              ->HandleImuMessage(topic,
+                                 delayed_msg.instantiate<sensor_msgs::Imu>());
+        }
+        if (delayed_msg.isType<nav_msgs::Odometry>()) {
+          node.map_builder_bridge()
+              ->sensor_bridge(trajectory_id)
+              ->HandleOdometryMessage(
+                  topic, delayed_msg.instantiate<nav_msgs::Odometry>());
+        }
+        delayed_messages.pop_front();
       }
 
       const string topic =
@@ -193,35 +245,7 @@ void Run(const std::vector<string>& bag_filenames) {
       if (expected_sensor_ids.count(topic) == 0) {
         continue;
       }
-      if (msg.isType<sensor_msgs::LaserScan>()) {
-        node.map_builder_bridge()
-            ->sensor_bridge(trajectory_id)
-            ->HandleLaserScanMessage(topic,
-                                     msg.instantiate<sensor_msgs::LaserScan>());
-      }
-      if (msg.isType<sensor_msgs::MultiEchoLaserScan>()) {
-        node.map_builder_bridge()
-            ->sensor_bridge(trajectory_id)
-            ->HandleMultiEchoLaserScanMessage(
-                topic, msg.instantiate<sensor_msgs::MultiEchoLaserScan>());
-      }
-      if (msg.isType<sensor_msgs::PointCloud2>()) {
-        node.map_builder_bridge()
-            ->sensor_bridge(trajectory_id)
-            ->HandlePointCloud2Message(
-                topic, msg.instantiate<sensor_msgs::PointCloud2>());
-      }
-      if (msg.isType<sensor_msgs::Imu>()) {
-        node.map_builder_bridge()
-            ->sensor_bridge(trajectory_id)
-            ->HandleImuMessage(topic, msg.instantiate<sensor_msgs::Imu>());
-      }
-      if (msg.isType<nav_msgs::Odometry>()) {
-        node.map_builder_bridge()
-            ->sensor_bridge(trajectory_id)
-            ->HandleOdometryMessage(topic,
-                                    msg.instantiate<nav_msgs::Odometry>());
-      }
+      delayed_messages.push_back(msg);
 
       rosgraph_msgs::Clock clock;
       clock.clock = msg.getTime();

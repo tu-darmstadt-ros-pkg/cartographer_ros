@@ -17,6 +17,7 @@
 #include "cartographer_ros/assets_writer.h"
 
 #include "cartographer/common/make_unique.h"
+#include "cartographer/common/time.h"
 #include "cartographer/io/file_writer.h"
 #include "cartographer/io/null_points_processor.h"
 #include "cartographer/io/ply_writing_points_processor.h"
@@ -34,12 +35,42 @@ namespace {
 
 namespace carto = ::cartographer;
 
+void WriteTrajectory(const std::vector<::cartographer::mapping::TrajectoryNode>&
+                         trajectory_nodes,
+                     const std::string& stem) {
+  carto::mapping::proto::Trajectory trajectory;
+  // TODO(whess): Add multi-trajectory support.
+  for (const auto& node : trajectory_nodes) {
+    const auto& data = *node.constant_data;
+    auto* node_proto = trajectory.add_node();
+    node_proto->set_timestamp(carto::common::ToUniversal(data.time));
+    *node_proto->mutable_pose() =
+        carto::transform::ToProto(node.pose * data.tracking_to_pose);
+  }
+
+  // Write the trajectory.
+  std::ofstream proto_file(stem + ".pb",
+                           std::ios_base::out | std::ios_base::binary);
+  CHECK(trajectory.SerializeToOstream(&proto_file))
+      << "Could not serialize trajectory.";
+  proto_file.close();
+  CHECK(proto_file) << "Could not write trajectory.";
+}
+
+}  // namespace
+
 // Writes an occupancy grid.
-void Write2DAssets(const std::vector<::cartographer::mapping::TrajectoryNode>&
-                       trajectory_nodes,
-                   const NodeOptions& options, const std::string& stem) {
+void Write2DAssets(
+    const std::vector<::cartographer::mapping::TrajectoryNode>&
+        trajectory_nodes,
+    const string& map_frame,
+    const ::cartographer::mapping_2d::proto::SubmapsOptions& submaps_options,
+    const std::string& stem) {
+  WriteTrajectory(trajectory_nodes, stem);
+
   ::nav_msgs::OccupancyGrid occupancy_grid;
-  BuildOccupancyGrid(trajectory_nodes, options, &occupancy_grid);
+  BuildOccupancyGrid2D(trajectory_nodes, map_frame, submaps_options,
+                       &occupancy_grid);
   WriteOccupancyGridToPgmAndYaml(occupancy_grid, stem);
 }
 
@@ -48,6 +79,8 @@ void Write2DAssets(const std::vector<::cartographer::mapping::TrajectoryNode>&
 void Write3DAssets(const std::vector<::cartographer::mapping::TrajectoryNode>&
                        trajectory_nodes,
                    const double voxel_size, const std::string& stem) {
+  WriteTrajectory(trajectory_nodes, stem);
+
   const auto file_writer_factory = [](const string& filename) {
     return carto::common::make_unique<carto::io::StreamFileWriter>(filename);
   };
@@ -80,42 +113,9 @@ void Write3DAssets(const std::vector<::cartographer::mapping::TrajectoryNode>&
     auto points_batch = carto::common::make_unique<carto::io::PointsBatch>();
     points_batch->origin = range_data.origin;
     points_batch->points = range_data.returns;
-    for (const uint8 reflectivity :
-         node.constant_data->range_data_3d.reflectivities) {
-      points_batch->colors.push_back(
-          carto::io::Color{{reflectivity, reflectivity, reflectivity}});
-    }
     ply_writing_points_processor.Process(std::move(points_batch));
   }
   ply_writing_points_processor.Flush();
-}
-
-}  // namespace
-
-void WriteAssets(const std::vector<::cartographer::mapping::TrajectoryNode>&
-                     trajectory_nodes,
-                 const NodeOptions& options, const std::string& stem) {
-  // Write the trajectory.
-  std::ofstream proto_file(stem + ".pb",
-                           std::ios_base::out | std::ios_base::binary);
-  const carto::mapping::proto::Trajectory trajectory =
-      carto::mapping::ToProto(trajectory_nodes);
-  CHECK(trajectory.SerializeToOstream(&proto_file))
-      << "Could not serialize trajectory.";
-  proto_file.close();
-  CHECK(proto_file) << "Could not write trajectory.";
-
-  if (options.map_builder_options.use_trajectory_builder_2d()) {
-    Write2DAssets(trajectory_nodes, options, stem);
-  }
-
-  if (options.map_builder_options.use_trajectory_builder_3d()) {
-    Write3DAssets(trajectory_nodes,
-                  options.map_builder_options.trajectory_builder_3d_options()
-                      .submaps_options()
-                      .high_resolution(),
-                  stem);
-  }
 }
 
 }  // namespace cartographer_ros
