@@ -92,14 +92,12 @@ class Node {
                          int trajectory_id);
   void PublishSubmapList(const ::ros::WallTimerEvent& timer_event);
   void PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event);
-  void PublishScanStates(const ::ros::WallTimerEvent& timer_event);
   void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
   bool ValidateTrajectoryOptions(const TrajectoryOptions& options);
   bool ValidateTopicName(const ::cartographer_ros_msgs::SensorTopics& topics,
                          const TrajectoryOptions& options);
 
-  void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker, int idx = -1);
 
   const NodeOptions node_options_;

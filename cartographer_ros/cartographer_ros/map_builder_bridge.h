@@ -61,7 +61,6 @@ class MapBuilderBridge {
   std::vector<chisel::ChiselPtr<chisel::DistVoxel>> GetTSDFList();
   std::unique_ptr<nav_msgs::OccupancyGrid> BuildOccupancyGrid();
   std::unordered_map<int, TrajectoryState> GetTrajectoryStates();
-  std::vector<chisel::ChiselPtr<chisel::DistVoxel>> GetTSDFList();
 
   SensorBridge* sensor_bridge(int trajectory_id);
 

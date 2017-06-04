@@ -139,21 +139,6 @@ cartographer_ros_msgs::SubmapList MapBuilderBridge::GetSubmapList() {
   return submap_list;
 }
 
-std::vector<chisel::ChiselPtr<chisel::DistVoxel> > MapBuilderBridge::GetTSDFList() {
-    std::vector<chisel::ChiselPtr<chisel::DistVoxel>> tsdf_list;
-    for (int trajectory_id = 0;
-         trajectory_id < map_builder_.num_trajectory_builders();
-         ++trajectory_id) {
-        const cartographer::mapping::TrajectoryBuilder* trajectory_builder =
-               map_builder_.GetTrajectoryBuilder(trajectory_id);
-        for(int submap_id = 0; submap_id < trajectory_builder->submaps()->size(); ++submap_id)
-        {
-            tsdf_list.push_back(trajectory_builder->submaps()->GetChiselPtr(submap_id));
-        }
-    }
-    return tsdf_list;
-}
-
 std::unique_ptr<nav_msgs::OccupancyGrid>
 MapBuilderBridge::BuildOccupancyGrid() {
   CHECK(node_options_.map_builder_options.use_trajectory_builder_2d())
