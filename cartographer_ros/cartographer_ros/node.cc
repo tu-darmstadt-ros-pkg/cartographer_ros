@@ -123,13 +123,16 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
         std::thread(&Node::SpinOccupancyGridThreadForever, this);
   }
 
-  mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("chisel_mesh", 1);
-  uncorrected_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("uncorrected_chisel_mesh", 1);
-  debug_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("debug_chisel_mesh", 1);
-  tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
-  aggregated_scan_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("aggregated_scan", 1);
-  raw_aggregated_scan_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("raw_aggregated_scan", 1);
-  matched_batch_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("matched_batch", 1);
+  if(node_options_.map_builder_options.use_tsdf())
+  {
+      mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("chisel_mesh", 1);
+      uncorrected_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("uncorrected_chisel_mesh", 1);
+      debug_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("debug_chisel_mesh", 1);
+      tsdf_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
+      aggregated_scan_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("aggregated_scan", 1);
+      raw_aggregated_scan_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("raw_aggregated_scan", 1);
+      matched_batch_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("matched_batch", 1);
+  }
 
   scan_matched_point_cloud_publisher_ =
       node_handle_.advertise<sensor_msgs::PointCloud2>(
@@ -141,9 +144,13 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(node_options_.pose_publish_period_sec),
       &Node::PublishTrajectoryStates, this));
-  wall_timers_.push_back(node_handle_.createWallTimer(
-      ::ros::WallDuration(node_options_.submap_publish_period_sec * 5.0),
-      &Node::PublishTSDF, this));
+
+  if(node_options_.map_builder_options.use_tsdf())
+  {
+      wall_timers_.push_back(node_handle_.createWallTimer(
+          ::ros::WallDuration(node_options_.submap_publish_period_sec),
+          &Node::PublishTSDF, this));
+  }
 }
 
 Node::~Node() {
