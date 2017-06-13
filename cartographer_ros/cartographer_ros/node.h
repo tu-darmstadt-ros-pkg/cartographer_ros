@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "cartographer/common/mutex.h"
+#include "cartographer_ros/chisel_bridge.h"
 #include "cartographer_ros/map_builder_bridge.h"
 #include "cartographer_ros/node_options.h"
 #include "cartographer_ros/trajectory_options.h"
@@ -71,6 +72,7 @@ class Node {
 
   ::ros::NodeHandle* node_handle();
   MapBuilderBridge* map_builder_bridge();
+  ChiselBridge* chisel_bridge();
 
  private:
   bool HandleSubmapQuery(
@@ -92,13 +94,12 @@ class Node {
                          int trajectory_id);
   void PublishSubmapList(const ::ros::WallTimerEvent& timer_event);
   void PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event);
-  void PublishTSDF(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
   bool ValidateTrajectoryOptions(const TrajectoryOptions& options);
   bool ValidateTopicName(const ::cartographer_ros_msgs::SensorTopics& topics,
                          const TrajectoryOptions& options);
+  void PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event);
 
-  void FillMarkerTopicWithMeshes(const chisel::MeshMap& meshMap, visualization_msgs::Marker* marker, int idx = -1);
 
   const NodeOptions node_options_;
 
@@ -107,6 +108,9 @@ class Node {
   cartographer::common::Mutex mutex_;
   MapBuilderBridge map_builder_bridge_ GUARDED_BY(mutex_);
 
+  cartographer::common::Mutex mutex_chisel_bridge_;
+  ChiselBridge chisel_bridge_ GUARDED_BY(mutex_chisel_bridge_);
+
   ::ros::NodeHandle node_handle_;
   ::ros::Publisher submap_list_publisher_;
   // These ros::ServiceServers need to live for the lifetime of the node.
@@ -114,16 +118,6 @@ class Node {
   ::ros::Publisher scan_matched_point_cloud_publisher_;
   cartographer::common::Time last_scan_matched_point_cloud_time_ =
       cartographer::common::Time::min();
-
-  ::ros::Publisher mesh_publisher_;
-  ::ros::Publisher uncorrected_mesh_publisher_;
-  ::ros::Publisher debug_mesh_publisher_;
-  ::ros::Publisher normal_publisher_;
-  ::ros::Publisher tsdf_publisher_;
-  ::ros::Publisher aggregated_scan_publisher_;
-  ::ros::Publisher raw_aggregated_scan_publisher_;
-  ::ros::Publisher matched_batch_publisher_;
-
 
   // These are keyed with 'trajectory_id'.
   std::unordered_map<int, ::ros::Subscriber> laser_scan_subscribers_;
