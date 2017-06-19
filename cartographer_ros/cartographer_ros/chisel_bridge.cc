@@ -160,7 +160,7 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
             if(chisel_map)
             {
                 const auto& chunkManager = chisel_map->GetChunkManager();
-                chisel::Vec3 map_offset = chunkManager.GetOrigin();
+                //chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 visualization_msgs::Marker marker;
                 marker.header.stamp = ros::Time::now();
                 marker.header.frame_id = "map";
@@ -237,7 +237,7 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
             if(chisel_map)
             {
                 const auto& chunkManager = chisel_map->GetChunkManager();
-                chisel::Vec3 map_offset = chunkManager.GetOrigin();
+                //chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 visualization_msgs::Marker marker;
                 marker.header.stamp = ros::Time::now();
                 marker.header.frame_id = "map";
