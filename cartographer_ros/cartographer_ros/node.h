@@ -98,7 +98,8 @@ class Node {
   bool ValidateTrajectoryOptions(const TrajectoryOptions& options);
   bool ValidateTopicName(const ::cartographer_ros_msgs::SensorTopics& topics,
                          const TrajectoryOptions& options);
-  void PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event);
+  void PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event);  
+  void publishTFLoop(double publishPeriod);
 
 
   const NodeOptions node_options_;
@@ -130,6 +131,8 @@ class Node {
   ::ros::Publisher occupancy_grid_publisher_;
   std::thread occupancy_grid_thread_;
   bool terminating_ = false GUARDED_BY(mutex_);
+
+  std::thread publishThread;
 
   // We have to keep the timer handles of ::ros::WallTimers around, otherwise
   // they do not fire.

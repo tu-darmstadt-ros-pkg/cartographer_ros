@@ -146,9 +146,9 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(node_options_.submap_publish_period_sec),
       &Node::PublishSubmapList, this));
-  wall_timers_.push_back(node_handle_.createWallTimer(
+  /*wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(node_options_.pose_publish_period_sec),
-      &Node::PublishTrajectoryStates, this));
+      &Node::PublishTrajectoryStates, this));*/
 
   if(node_options_.map_builder_options.use_tsdf())
   {
@@ -156,9 +156,14 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
           ::ros::WallDuration(node_options_.submap_publish_period_sec),
           &Node::PublishTSDF, this));
   }
+  double tfRefreshPeriod = 0.025;
+
+  publishThread = std::thread(std::bind(&Node::publishTFLoop, this, tfRefreshPeriod));
 }
 
 Node::~Node() {
+
+  publishThread.join();
   {
     carto::common::MutexLocker lock(&mutex_);
     terminating_ = true;
@@ -518,6 +523,19 @@ void Node::FinishAllTrajectories() {
     }
   }
 }
+
+void Node::publishTFLoop(double publishPeriod)
+{
+    if(publishPeriod == 0)
+        return;
+    ros::Rate r(1.0 / publishPeriod);
+    while(ros::ok())
+    {
+        PublishTrajectoryStates(::ros::WallTimerEvent());
+        r.sleep();
+    }
+}
+
 
 
 }  // namespace cartographer_ros
