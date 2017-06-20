@@ -162,12 +162,13 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
 }
 
 Node::~Node() {
-
-  publishThread.join();
   {
     carto::common::MutexLocker lock(&mutex_);
     terminating_ = true;
   }
+
+  publishThread.join();
+
   if (occupancy_grid_thread_.joinable()) {
     occupancy_grid_thread_.join();
   }
@@ -514,6 +515,14 @@ bool Node::HandleWriteAssets(
   return true;
 }
 
+
+void Node::WriteAssets(std::string stem)
+{
+    carto::common::MutexLocker lock(&mutex_);
+    map_builder_bridge_.WriteAssets(stem);
+}
+
+
 void Node::FinishAllTrajectories() {
   carto::common::MutexLocker lock(&mutex_);
   for (const auto& entry : is_active_trajectory_) {
@@ -529,7 +538,7 @@ void Node::publishTFLoop(double publishPeriod)
     if(publishPeriod == 0)
         return;
     ros::Rate r(1.0 / publishPeriod);
-    while(ros::ok())
+    while(ros::ok() && !terminating_) //todo(kdaun) mutex for terminating
     {
         PublishTrajectoryStates(::ros::WallTimerEvent());
         r.sleep();

@@ -46,6 +46,15 @@ SensorBridge::SensorBridge(
 
 void SensorBridge::HandleOdometryMessage(
     const string& sensor_id, const nav_msgs::Odometry::ConstPtr& msg) {
+    if(last_odometer_data_time >msg->header.stamp)
+    {
+        ROS_WARN("Dropping odom data to maintain time consistency.");
+        return;
+    }
+    else
+    {
+        last_odometer_data_time = msg->header.stamp;
+    }
   const carto::common::Time time = FromRos(msg->header.stamp);
   const auto sensor_to_tracking = tf_bridge_.LookupToTracking(
       time, CheckNoLeadingSlash(msg->child_frame_id));
@@ -69,7 +78,19 @@ void SensorBridge::HandleImuMessage(const string& sensor_id,
          "requires this data to work. See "
          "http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html.";
 
+
+  if(last_imu_data_time >msg->header.stamp)
+  {
+      ROS_WARN("Dropping imu data to maintain time consistency.");
+      return;
+  }
+  else
+  {
+      last_imu_data_time = msg->header.stamp;
+  }
+
   const carto::common::Time time = FromRos(msg->header.stamp);
+
   const auto sensor_to_tracking = tf_bridge_.LookupToTracking(
       time, CheckNoLeadingSlash(msg->header.frame_id));
   if (sensor_to_tracking != nullptr) {

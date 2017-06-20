@@ -66,6 +66,8 @@ class SensorBridge {
   const TfBridge tf_bridge_;
   ::cartographer::mapping::TrajectoryBuilder* const trajectory_builder_;
   ros::Time last_range_data_time;
+  ros::Time last_odometer_data_time;
+  ros::Time last_imu_data_time;
 };
 
 }  // namespace cartographer_ros

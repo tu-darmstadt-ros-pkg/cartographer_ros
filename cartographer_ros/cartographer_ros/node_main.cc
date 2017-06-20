@@ -56,64 +56,55 @@ class NodeWrapper
 {
 
 public:
-    std::unique_ptr<tf2_ros::TransformListener> tf;
-    std::unique_ptr<Node> node;
-    std::unique_ptr<tf2_ros::Buffer> tf_buffer;
-    ros::Subscriber syscommand_subscriber;
+    std::unique_ptr<tf2_ros::TransformListener> tf_;
+    std::unique_ptr<Node> node_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    ros::Subscriber syscommand_subscriber_;
     ros::NodeHandle node_handle_;
+
 
     NodeWrapper()
     {
-        syscommand_subscriber = node_handle_.subscribe("syscommand", 1000, &NodeWrapper::SyscommandCallback, this);
+        syscommand_subscriber_ = node_handle_.subscribe("syscommand", 1000, &NodeWrapper::SyscommandCallback, this);
     }
 
 
 
     void Run() {
         constexpr double kTfBufferCacheTimeInSeconds = 1e6;
-        tf_buffer = cartographer::common::make_unique<tf2_ros::Buffer>(::ros::Duration(kTfBufferCacheTimeInSeconds));
+        tf_buffer_ = cartographer::common::make_unique<tf2_ros::Buffer>(::ros::Duration(kTfBufferCacheTimeInSeconds));
         //tf2_ros::TransformListener tf(tf_buffer);
-        tf = cartographer::common::make_unique<tf2_ros::TransformListener>(*tf_buffer);
+        tf_ = cartographer::common::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
         NodeOptions node_options;
         TrajectoryOptions trajectory_options;
         std::tie(node_options, trajectory_options) = LoadOptions();
 
         //Node node(node_options, &tf_buffer);
 
-        node = cartographer::common::make_unique<Node>(node_options, tf_buffer.get());
-        node->StartTrajectoryWithDefaultTopics(trajectory_options);
+        node_ = cartographer::common::make_unique<Node>(node_options, tf_buffer_.get());
+        node_->StartTrajectoryWithDefaultTopics(trajectory_options);
 
     }
 
     void Finish()
     {
-        node->FinishAllTrajectories();
+        node_->FinishAllTrajectories();
     }
 
     void SyscommandCallback(const std_msgs::String::ConstPtr& msg)
     {
         if(msg->data == "reset" || msg->data == "reset_map")
         {
-            ROS_INFO("Received2: %s", msg->data.c_str());
-            //map_builder_bridge_->map_builder_.reset();
-            //tf2_ros::Buffer* tf_buffer;// = map_builder_bridge_->tf_buffer_;
-            // map_builder_bridge_ = MapBuilderBridge(node_options_, tf_buffer);
-            //map_builder_bridge_.reset();
-            //map_builder_bridge_ = std::make_shared<MapBuilderBridge>(node_options_, tf_buffer);
-            /*      FinishAllTrajectories();
-        {
-          carto::common::MutexLocker lock(&mutex_);
-          terminating_ = true;
-        }
-        if (occupancy_grid_thread_.joinable()) {
-          occupancy_grid_thread_.join();
-        }
-*/
+            ROS_INFO("Received: %s", msg->data.c_str());
+            ROS_INFO("Writing data...");
+            node_->WriteAssets("test123");
+            ROS_INFO("Resetting now");
             Finish();
-            node.reset();
-            tf.reset();
-            tf_buffer.reset();
+            node_.reset();
+            tf_.reset();
+            tf_buffer_.reset();
             Run();
+            ROS_INFO("Finished Reset");
         }
     }
 

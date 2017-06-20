@@ -70,6 +70,9 @@ class Node {
   // Starts the first trajectory with the default topics.
   void StartTrajectoryWithDefaultTopics(const TrajectoryOptions& options);
 
+  //Writes all assets with stem as name
+  void WriteAssets(std::string stem);
+
   ::ros::NodeHandle* node_handle();
   MapBuilderBridge* map_builder_bridge();
   ChiselBridge* chisel_bridge();
