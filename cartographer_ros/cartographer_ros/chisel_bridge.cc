@@ -144,7 +144,7 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
         }
         sensor_msgs::PointCloud2 pc;
         pcl::toROSMsg(cloud, pc);
-        pc.header.frame_id = "map";
+        pc.header.frame_id = "world";
         pc.header.stamp = ros::Time::now();
         tsdf_pointcloud_publisher_.publish(pc);
     }
@@ -159,11 +159,11 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
         {
             if(chisel_map)
             {
-                const auto& chunkManager = chisel_map->GetChunkManager();
+                //const auto& chunkManager = chisel_map->GetChunkManager();
                 //chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 visualization_msgs::Marker marker;
                 marker.header.stamp = ros::Time::now();
-                marker.header.frame_id = "map";
+                marker.header.frame_id = "world";
                 marker.id = id;
                 marker.scale.x = 1;
                 marker.scale.y = 1;
@@ -201,7 +201,7 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
                 chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 visualization_msgs::Marker marker;
                 marker.header.stamp = ros::Time::now();
-                marker.header.frame_id = "map";
+                marker.header.frame_id = "world";
                 marker.id = id;
                 marker.scale.x = 1;
                 marker.scale.y = 1;
@@ -236,11 +236,11 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
         {
             if(chisel_map)
             {
-                const auto& chunkManager = chisel_map->GetChunkManager();
+                //const auto& chunkManager = chisel_map->GetChunkManager();
                 //chisel::Vec3 map_offset = chunkManager.GetOrigin();
                 visualization_msgs::Marker marker;
                 marker.header.stamp = ros::Time::now();
-                marker.header.frame_id = "map";
+                marker.header.frame_id = "world";
                 marker.id = id;
                 marker.scale.x = 1;
                 marker.scale.y = 1;
@@ -274,10 +274,10 @@ void ChiselBridge::PublishTSDF(MapBuilderBridge* map_builder_bridge) {
         chisel_msgs::IncrementalChangesMessagePtr inc_changes_msg = boost::make_shared<chisel_msgs::IncrementalChangesMessage>();
 
         volume_msg->header.stamp = ros::Time::now();
-        volume_msg->header.frame_id = "map";
+        volume_msg->header.frame_id = "world";
 
         inc_changes_msg->header.stamp = volume_msg->header.stamp;
-        inc_changes_msg->header.frame_id = "map";
+        inc_changes_msg->header.frame_id = "world";
 
 
         if(chisel_map)
