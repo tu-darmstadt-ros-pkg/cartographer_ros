@@ -44,7 +44,8 @@
 #include "tf2_eigen/tf2_eigen.h"
 #include "chisel_msgs/VolumeMessage.h"
 #include "chisel_msgs/IncrementalChangesMessage.h"
-
+#include "pcl_ros/point_cloud.h"
+#include "pcl_ros/transforms.h"
 namespace cartographer_ros {
 
 namespace carto = ::cartographer;
@@ -217,13 +218,36 @@ void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
     // frequency, and republishing it would be computationally wasteful.
     if (trajectory_state.pose_estimate.time !=
         last_scan_matched_point_cloud_time_) {
-      scan_matched_point_cloud_publisher_.publish(ToPointCloud2Message(
-          carto::common::ToUniversal(trajectory_state.pose_estimate.time),
-          trajectory_state.trajectory_options.tracking_frame,
-          carto::sensor::TransformPointCloud(
-              trajectory_state.pose_estimate.point_cloud,
-              tracking_to_local.inverse().cast<float>())));
-      last_scan_matched_point_cloud_time_ = trajectory_state.pose_estimate.time;
+        sensor_msgs::PointCloud2 matched_cloud = ToPointCloud2Message(
+                    carto::common::ToUniversal(trajectory_state.pose_estimate.time),
+                    trajectory_state.trajectory_options.tracking_frame,
+                    carto::sensor::TransformPointCloud(
+                        trajectory_state.pose_estimate.point_cloud,
+                        tracking_to_local.inverse().cast<float>()));
+        geometry_msgs::TransformStamped transform = map_builder_bridge_.tf_buffer_->lookupTransform("spin_lidar_lidar_mount_link_fixed", "base_link", matched_cloud.header.stamp, ros::Duration(1.0) );
+
+        sensor_msgs::PointCloud2 matched_cloud_transformed;
+        pcl::PointCloud<pcl::PointXYZ> cloud;
+        pcl::PointCloud<pcl::PointXYZ> cloud_transformed;
+        pcl::fromROSMsg (matched_cloud, cloud);
+        tf::Transform tf_transform;
+        tf_transform.setOrigin({transform.transform.translation.x,
+                                transform.transform.translation.y,
+                                transform.transform.translation.z});
+        tf_transform.setRotation({transform.transform.rotation.x,
+                                 transform.transform.rotation.y,
+                                 transform.transform.rotation.z,
+                                 transform.transform.rotation.w});
+        pcl_ros::transformPointCloud (cloud,
+                             cloud_transformed,
+                             tf_transform);
+        pcl::toROSMsg(cloud_transformed, matched_cloud_transformed);
+        matched_cloud_transformed.header.stamp = matched_cloud.header.stamp;
+        matched_cloud_transformed.header.frame_id = "spin_lidar_lidar_mount_link_fixed"; //todo(kdaun) move frame definition to config
+
+        scan_matched_point_cloud_publisher_.publish(matched_cloud_transformed);
+
+        last_scan_matched_point_cloud_time_ = trajectory_state.pose_estimate.time;
     } else {
       // If we do not publish a new point cloud, we still allow time of the
       // published poses to advance.
