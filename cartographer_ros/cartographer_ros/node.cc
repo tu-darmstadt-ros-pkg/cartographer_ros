@@ -55,6 +55,7 @@ using carto::transform::Rigid3d;
 namespace {
 
 constexpr int kInfiniteSubscriberQueueSize = 0;
+constexpr int kRangeDataSubscriberQueueSize = 10;
 constexpr int kLatestOnlyPublisherQueueSize = 1;
 
 // Try to convert 'msg' into 'options'. Returns false on failure.
@@ -342,7 +343,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
     const string topic = topics.laser_scan_topic;
     laser_scan_subscribers_[trajectory_id] =
         node_handle_.subscribe<sensor_msgs::LaserScan>(
-            topic, kInfiniteSubscriberQueueSize,
+            topic, kRangeDataSubscriberQueueSize,
             boost::function<void(const sensor_msgs::LaserScan::ConstPtr&)>(
                 [this, trajectory_id,
                  topic](const sensor_msgs::LaserScan::ConstPtr& msg) {
@@ -355,7 +356,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
     const string topic = topics.multi_echo_laser_scan_topic;
     multi_echo_laser_scan_subscribers_[trajectory_id] =
         node_handle_.subscribe<sensor_msgs::MultiEchoLaserScan>(
-            topic, kInfiniteSubscriberQueueSize,
+            topic, kRangeDataSubscriberQueueSize,
             boost::function<void(
                 const sensor_msgs::MultiEchoLaserScan::ConstPtr&)>(
                 [this, trajectory_id,
@@ -373,7 +374,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
         topic += "_" + std::to_string(i + 1);
       }
       grouped_point_cloud_subscribers.push_back(node_handle_.subscribe(
-          topic, kInfiniteSubscriberQueueSize,
+          topic, kRangeDataSubscriberQueueSize,
           boost::function<void(const sensor_msgs::PointCloud2::ConstPtr&)>(
               [this, trajectory_id,
                topic](const sensor_msgs::PointCloud2::ConstPtr& msg) {
