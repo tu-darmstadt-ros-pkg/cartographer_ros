@@ -122,6 +122,7 @@ class Node {
   ::ros::Publisher scan_matched_point_cloud_publisher_;
   cartographer::common::Time last_scan_matched_point_cloud_time_ =
       cartographer::common::Time::min();
+  ros::Time last_scan_matched_update_time_;
 
   // These are keyed with 'trajectory_id'.
   std::unordered_map<int, ::ros::Subscriber> laser_scan_subscribers_;
