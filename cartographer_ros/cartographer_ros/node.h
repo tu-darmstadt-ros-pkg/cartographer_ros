@@ -101,7 +101,7 @@ class Node {
   bool ValidateTrajectoryOptions(const TrajectoryOptions& options);
   bool ValidateTopicName(const ::cartographer_ros_msgs::SensorTopics& topics,
                          const TrajectoryOptions& options);
-  void PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event);  
+  void PublishTSDF(const ::ros::WallTimerEvent& unused_timer_event);
   void publishTFLoop(double publishPeriod);
 
 

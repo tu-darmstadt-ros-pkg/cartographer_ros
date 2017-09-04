@@ -46,6 +46,8 @@
 #include "chisel_msgs/IncrementalChangesMessage.h"
 #include "pcl_ros/point_cloud.h"
 #include "pcl_ros/transforms.h"
+#include "voxblox_ros/ptcloud_vis.h"
+
 namespace cartographer_ros {
 
 namespace carto = ::cartographer;
@@ -127,7 +129,7 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
         std::thread(&Node::SpinOccupancyGridThreadForever, this);
   }
 
-  if(node_options_.map_builder_options.use_tsdf())
+  if(node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::CHISEL_TSDF)
   {
       chisel_bridge()->mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("chisel_mesh", 1);
       chisel_bridge()->uncorrected_mesh_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>("uncorrected_chisel_mesh", 1);
@@ -138,7 +140,10 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
       chisel_bridge()->matched_batch_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("matched_batch", 1);
       chisel_bridge()->volume_publisher_ = node_handle_.advertise<chisel_msgs::VolumeMessage>("tsdf_volume", 1);
       chisel_bridge()->incremental_changes_publisher_ = node_handle_.advertise<chisel_msgs::IncrementalChangesMessage>("tsdf_incremental_changes", 1);
-
+  }
+  else if(node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::VOXBLOX_TSDF)
+  {
+    chisel_bridge()->tsdf_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
   }
 
   scan_matched_point_cloud_publisher_ =
@@ -152,7 +157,8 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
       ::ros::WallDuration(node_options_.pose_publish_period_sec),
       &Node::PublishTrajectoryStates, this));*/
 
-  if(node_options_.map_builder_options.use_tsdf())
+  if((node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::CHISEL_TSDF)
+    || (node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::VOXBLOX_TSDF))
   {
       wall_timers_.push_back(node_handle_.createWallTimer(
           ::ros::WallDuration(node_options_.submap_publish_period_sec),
@@ -199,7 +205,21 @@ void Node::PublishSubmapList(const ::ros::WallTimerEvent& unused_timer_event) {
 }
 
 void Node::PublishTSDF(const ros::WallTimerEvent &unused_timer_event){
+  if(node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::CHISEL_TSDF)
+  {
     chisel_bridge()->PublishTSDF(map_builder_bridge());
+  }
+  else if(node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::VOXBLOX_TSDF)
+  {
+    std::vector<std::shared_ptr<voxblox::TsdfMap>> tsdf_list = map_builder_bridge()->GetVoxbloxTSDFList();
+    int trajectory_id = 0;
+
+    pcl::PointCloud<pcl::PointXYZI> pointcloud;
+    createDistancePointcloudFromTsdfLayer(tsdf_list[0]->getTsdfLayer(), &pointcloud);
+    pointcloud.header.frame_id = "world";
+    chisel_bridge()->tsdf_pointcloud_publisher_.publish(pointcloud);
+  }
+
 }
 
 

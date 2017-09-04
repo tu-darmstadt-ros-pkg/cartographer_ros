@@ -31,6 +31,7 @@
 #include "cartographer_ros_msgs/SubmapList.h"
 #include "cartographer_ros_msgs/SubmapQuery.h"
 #include "nav_msgs/OccupancyGrid.h"
+#include "voxblox/core/tsdf_map.h"
 
 namespace cartographer_ros {
 
@@ -59,6 +60,7 @@ class MapBuilderBridge {
 
   cartographer_ros_msgs::SubmapList GetSubmapList();
   std::vector<chisel::ChiselPtr<chisel::DistVoxel>> GetTSDFList();
+  std::vector<std::shared_ptr<voxblox::TsdfMap>> GetVoxbloxTSDFList();
   std::unique_ptr<nav_msgs::OccupancyGrid> BuildOccupancyGrid();
   std::unordered_map<int, TrajectoryState> GetTrajectoryStates();
 

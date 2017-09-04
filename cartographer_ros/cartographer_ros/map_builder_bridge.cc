@@ -212,4 +212,20 @@ std::vector<chisel::ChiselPtr<chisel::DistVoxel> > MapBuilderBridge::GetTSDFList
 }
 
 
+std::vector<std::shared_ptr<voxblox::TsdfMap>> MapBuilderBridge::GetVoxbloxTSDFList() {
+  std::vector<std::shared_ptr<voxblox::TsdfMap>> tsdf_list;
+  for (int trajectory_id = 0;
+       trajectory_id < map_builder_.num_trajectory_builders();
+       ++trajectory_id) {
+      const cartographer::mapping::TrajectoryBuilder* trajectory_builder =
+             map_builder_.GetTrajectoryBuilder(trajectory_id);
+      for(int submap_id = 0; submap_id < trajectory_builder->submaps()->size(); ++submap_id)
+      {
+          tsdf_list.push_back(trajectory_builder->submaps()->GetVoxbloxTSDFPtr(submap_id));
+      }
+  }
+  return tsdf_list;
+}
+
+
 }  // namespace cartographer_ros
