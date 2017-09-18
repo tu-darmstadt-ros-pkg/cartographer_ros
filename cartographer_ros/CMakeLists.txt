@@ -33,6 +33,8 @@ set(PACKAGE_DEPENDENCIES
   tf2_eigen
   tf2_ros
   urdf
+  voxblox
+  voxblox_msgs
 )
 
 find_package(cartographer REQUIRED)

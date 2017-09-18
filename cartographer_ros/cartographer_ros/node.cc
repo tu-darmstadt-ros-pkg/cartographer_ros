@@ -47,6 +47,11 @@
 #include "pcl_ros/point_cloud.h"
 #include "pcl_ros/transforms.h"
 #include "voxblox_ros/ptcloud_vis.h"
+#include "voxblox_msgs/Mesh.h"
+
+#include <voxblox/mesh/mesh_integrator.h>
+#include <voxblox_ros/mesh_vis.h>
+#include <voxblox_ros/ptcloud_vis.h>
 
 namespace cartographer_ros {
 
@@ -143,7 +148,8 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
   }
   else if(node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::VOXBLOX_TSDF)
   {
-    chisel_bridge()->tsdf_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("chisel_tsdf", 1);
+    chisel_bridge()->tsdf_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("voxblox_tsdf", 1);
+    chisel_bridge()->mesh_publisher_ = node_handle_.advertise<voxblox_msgs::Mesh>("voxblox_mesh", 1, true);
   }
 
   scan_matched_point_cloud_publisher_ =
@@ -161,7 +167,7 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
     || (node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::VOXBLOX_TSDF))
   {
       wall_timers_.push_back(node_handle_.createWallTimer(
-          ::ros::WallDuration(node_options_.submap_publish_period_sec),
+          ::ros::WallDuration(node_options_.submap_publish_period_sec * 20.),
           &Node::PublishTSDF, this));
   }
   double tfRefreshPeriod = 0.025;
@@ -213,11 +219,63 @@ void Node::PublishTSDF(const ros::WallTimerEvent &unused_timer_event){
   {
     std::vector<std::shared_ptr<voxblox::TsdfMap>> tsdf_list = map_builder_bridge()->GetVoxbloxTSDFList();
     int trajectory_id = 0;
-
     pcl::PointCloud<pcl::PointXYZI> pointcloud;
-    createDistancePointcloudFromTsdfLayer(tsdf_list[0]->getTsdfLayer(), &pointcloud);
-    pointcloud.header.frame_id = "world";
-    chisel_bridge()->tsdf_pointcloud_publisher_.publish(pointcloud);
+/*
+    float min_x = -5.;
+    float min_y = -5.;
+    float min_z = 1.;
+    float max_x = 5.;
+    float max_y = 5.;
+    float max_z = 1.01;
+    for(float x = min_x; x <= max_x; x += 0.05) {
+      for(float y = min_y; y <= max_y; y += 0.05) {
+        for(float z = min_z; z <= max_z; z += 0.05) {
+          voxblox::Point point(x, y, z);
+          voxblox::Layer<voxblox::TsdfVoxel>::BlockType::ConstPtr block_ptr =
+              tsdf_list[0]->getTsdfLayer().getBlockPtrByCoordinates(point);
+          if (block_ptr != nullptr) {
+            const voxblox::TsdfVoxel& voxel = block_ptr->getVoxelByCoordinates(point);
+            if (voxel.weight > 1e-3)
+            {
+              float q = std::abs(voxel.distance);
+              pcl::PointXYZI p;
+              p.x = x;
+              p.y = y;
+              p.z = z;
+              p.intensity = q;
+              pointcloud.push_back(p);
+             //LOG(INFO)<<"q "<<q;
+            }
+          }
+        }
+      }
+    }*/
+    //createDistancePointcloudFromTsdfLayer(tsdf_list[0]->getTsdfLayer(), &pointcloud);
+   // pointcloud.header.frame_id = "world";
+    //chisel_bridge()->tsdf_pointcloud_publisher_.publish(pointcloud);
+
+    //mesh_publisher_
+  /*  voxblox::MeshIntegrator<voxblox::TsdfVoxel>::Config mesh_config;
+    mesh_config.min_weight = 0.1;
+
+    std::shared_ptr<voxblox::MeshLayer> mesh_layer_;
+    std::shared_ptr<voxblox::MeshIntegrator<voxblox::TsdfVoxel>> mesh_integrator_;
+
+    mesh_layer_.reset(new voxblox::MeshLayer(tsdf_list[0]->block_size()));
+    mesh_integrator_.reset(new voxblox::MeshIntegrator<voxblox::TsdfVoxel>(
+        mesh_config, tsdf_list[0]->getTsdfLayerPtr(), mesh_layer_.get()));
+
+
+    constexpr bool only_mesh_updated_blocks = false;
+    constexpr bool clear_updated_flag = true;
+    mesh_integrator_->generateMesh(only_mesh_updated_blocks,
+                                   clear_updated_flag);
+    voxblox_msgs::Mesh mesh_msg;
+    voxblox::generateVoxbloxMeshMsg(mesh_layer_, voxblox::ColorMode::kNormals, &mesh_msg);
+    mesh_msg.header.frame_id = "world";
+    chisel_bridge()->mesh_publisher_.publish(mesh_msg);*/
+
+
   }
 
 }

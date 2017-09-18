@@ -61,6 +61,8 @@
   <depend>urdf</depend>
   <depend>yaml-cpp</depend>
   <depend>visualization_msgs</depend>
+  <depend>voxblox</depend>
+  <depend>voxblox_msgs</depend>
 
   <test_depend>rosunit</test_depend>
 
