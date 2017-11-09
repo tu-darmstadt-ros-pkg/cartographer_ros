@@ -120,14 +120,15 @@ void SensorBridge::HandleMultiEchoLaserScanMessage(
 
 void SensorBridge::HandlePointCloud2Message(
     const string& sensor_id, const sensor_msgs::PointCloud2::ConstPtr& msg) {
-  if(last_range_data_time >msg->header.stamp)
+  if(last_range_data_time > msg->header.stamp)
   {
-      ROS_WARN("Dropping pointcloud to maintain time consistency.");
+      //ROS_WARN("Dropping pointcloud to maintain time consistency. Reference: %f Received %f delta %f", last_range_data_time.toSec(), msg->header.stamp.toSec(), last_range_data_time.toSec()- msg->header.stamp.toSec());
       return;
   }
   else
   {
-      last_range_data_time = msg->header.stamp;
+    //ROS_INFO("Time stamp ok. Reference: %f Received %f delta %f", last_range_data_time.toSec(), msg->header.stamp.toSec(), last_range_data_time.toSec()- msg->header.stamp.toSec());
+    last_range_data_time = msg->header.stamp;
   }
 
   pcl::PointCloud<pcl::PointXYZ> pcl_point_cloud;

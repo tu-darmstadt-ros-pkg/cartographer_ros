@@ -37,6 +37,7 @@
 #include "cartographer_ros/time_conversion.h"
 #include "glog/logging.h"
 #include "nav_msgs/Odometry.h"
+#include "std_msgs/Bool.h"
 #include "ros/serialization.h"
 #include "sensor_msgs/PointCloud2.h"
 #include "visualization_msgs/Marker.h"
@@ -62,7 +63,7 @@ using carto::transform::Rigid3d;
 namespace {
 
 constexpr int kInfiniteSubscriberQueueSize = 0;
-constexpr int kRangeDataSubscriberQueueSize = 10;
+constexpr int kRangeDataSubscriberQueueSize = 0;
 constexpr int kLatestOnlyPublisherQueueSize = 1;
 
 // Try to convert 'msg' into 'options'. Returns false on failure.
@@ -150,6 +151,13 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
   {
     chisel_bridge()->tsdf_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("voxblox_tsdf", 1);
     chisel_bridge()->mesh_publisher_ = node_handle_.advertise<voxblox_msgs::Mesh>("voxblox_mesh", 1, true);
+    chisel_bridge()->generate_mesh_subscriber_ = node_handle_.subscribe<std_msgs::Bool>("generate_mesh", 1,
+                                                                                         boost::function<void(std_msgs::Bool)>(
+                                                                                             [this](std_msgs::Bool msg) {
+                                                                                               chisel_bridge()->generate_mesh_ = msg.data;
+                                                                                            LOG(INFO)<<"mesh "<<msg.data;
+
+                                                                                             }));
   }
 
   scan_matched_point_cloud_publisher_ =
@@ -167,7 +175,7 @@ Node::Node(const NodeOptions& node_options, tf2_ros::Buffer* const tf_buffer)
     || (node_options_.map_builder_options.map_type() == carto::mapping::proto::MapBuilderOptions::VOXBLOX_TSDF))
   {
       wall_timers_.push_back(node_handle_.createWallTimer(
-          ::ros::WallDuration(node_options_.submap_publish_period_sec * 20.),
+          ::ros::WallDuration(node_options_.submap_publish_period_sec * 1.),
           &Node::PublishTSDF, this));
   }
   double tfRefreshPeriod = 0.025;
@@ -255,25 +263,28 @@ void Node::PublishTSDF(const ros::WallTimerEvent &unused_timer_event){
     //chisel_bridge()->tsdf_pointcloud_publisher_.publish(pointcloud);
 
     //mesh_publisher_
-  /*  voxblox::MeshIntegrator<voxblox::TsdfVoxel>::Config mesh_config;
-    mesh_config.min_weight = 0.1;
+    if(chisel_bridge()->generate_mesh_){
+        chisel_bridge()->generate_mesh_ = false;
+        voxblox::MeshIntegrator<voxblox::TsdfVoxel>::Config mesh_config;
+        mesh_config.min_weight = 0.1;
 
-    std::shared_ptr<voxblox::MeshLayer> mesh_layer_;
-    std::shared_ptr<voxblox::MeshIntegrator<voxblox::TsdfVoxel>> mesh_integrator_;
+        std::shared_ptr<voxblox::MeshLayer> mesh_layer_;
+        std::shared_ptr<voxblox::MeshIntegrator<voxblox::TsdfVoxel>> mesh_integrator_;
 
-    mesh_layer_.reset(new voxblox::MeshLayer(tsdf_list[0]->block_size()));
-    mesh_integrator_.reset(new voxblox::MeshIntegrator<voxblox::TsdfVoxel>(
-        mesh_config, tsdf_list[0]->getTsdfLayerPtr(), mesh_layer_.get()));
+        mesh_layer_.reset(new voxblox::MeshLayer(tsdf_list[0]->block_size()));
+        mesh_integrator_.reset(new voxblox::MeshIntegrator<voxblox::TsdfVoxel>(
+            mesh_config, tsdf_list[0]->getTsdfLayerPtr(), mesh_layer_.get()));
 
 
-    constexpr bool only_mesh_updated_blocks = false;
-    constexpr bool clear_updated_flag = true;
-    mesh_integrator_->generateMesh(only_mesh_updated_blocks,
-                                   clear_updated_flag);
-    voxblox_msgs::Mesh mesh_msg;
-    voxblox::generateVoxbloxMeshMsg(mesh_layer_, voxblox::ColorMode::kNormals, &mesh_msg);
-    mesh_msg.header.frame_id = "world";
-    chisel_bridge()->mesh_publisher_.publish(mesh_msg);*/
+        constexpr bool only_mesh_updated_blocks = false;
+        constexpr bool clear_updated_flag = true;
+        mesh_integrator_->generateMesh(only_mesh_updated_blocks,
+                                       clear_updated_flag);
+        voxblox_msgs::Mesh mesh_msg;
+        voxblox::generateVoxbloxMeshMsg(mesh_layer_, voxblox::ColorMode::kNormals, &mesh_msg);
+        mesh_msg.header.frame_id = "world";
+        chisel_bridge()->mesh_publisher_.publish(mesh_msg);
+    }
 
 
   }
@@ -303,7 +314,7 @@ void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
                     carto::sensor::TransformPointCloud(
                         trajectory_state.pose_estimate.point_cloud,
                         tracking_to_local.inverse().cast<float>()));
-        geometry_msgs::TransformStamped transform = map_builder_bridge_.tf_buffer_->lookupTransform("spin_lidar_lidar_mount_link_fixed", "base_link", matched_cloud.header.stamp, ros::Duration(1.0) );
+        geometry_msgs::TransformStamped transform = map_builder_bridge_.tf_buffer_->lookupTransform("base_link", "base_link", matched_cloud.header.stamp, ros::Duration(1.0) );
 
         sensor_msgs::PointCloud2 matched_cloud_transformed;
         pcl::PointCloud<pcl::PointXYZ> cloud;
@@ -322,7 +333,7 @@ void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
                              tf_transform);
         pcl::toROSMsg(cloud_transformed, matched_cloud_transformed);
         matched_cloud_transformed.header.stamp = matched_cloud.header.stamp;
-        matched_cloud_transformed.header.frame_id = "spin_lidar_lidar_mount_link_fixed"; //todo(kdaun) move frame definition to config
+        matched_cloud_transformed.header.frame_id = "base_link"; //todo(kdaun) move frame definition to config
 
         scan_matched_point_cloud_publisher_.publish(matched_cloud_transformed);
 

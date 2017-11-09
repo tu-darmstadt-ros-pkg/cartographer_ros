@@ -27,7 +27,9 @@
 
 namespace cartographer_ros {
 ChiselBridge::ChiselBridge()
-{}
+{
+    generate_mesh_ = false;
+}
 
 void chunkToMsg(chisel::ChunkConstPtr<chisel::DistVoxel> chunk, chisel_msgs::ChunkMessage& msg)
 {

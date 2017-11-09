@@ -57,6 +57,10 @@ class ChiselBridge {
   ::ros::Publisher matched_batch_publisher_;
   ::ros::Publisher volume_publisher_;
   ::ros::Publisher incremental_changes_publisher_;
+
+
+  ::ros::Subscriber generate_mesh_subscriber_;
+  bool generate_mesh_;
 };
 
 }  // namespace cartographer_ros
