@@ -45,8 +45,8 @@
   <depend version_gte="1.0.0">cartographer_ros_msgs</depend>
   <depend>eigen_conversions</depend>
   <depend>geometry_msgs</depend>
-  <depend>libgflags-dev</depend>
-  <depend>libgoogle-glog-dev</depend>
+  <depend>gflags_catkin</depend>
+  <depend>glog_catkin</depend>
   <depend>libpcl-all-dev</depend>
   <depend>message_runtime</depend>
   <depend>nav_msgs</depend>
